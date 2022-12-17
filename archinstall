@@ -71,11 +71,13 @@ get_timezone() {
   timezone=""
   while [ -z "$timezone" ]; do
     # choose a timezone
-    timezone=$(localectl list-timezones --no-pager | gum filter --prompt.foreground 93 \
+    timezone=$(timedatectl list-timezones --no-pager | gum filter --prompt.foreground 93 \
       --prompt.bold --prompt "Timezone: " --placeholder "(search for your timezone)")
   done
   # synchronize the network time protocol
   timedatectl set-ntp true
+  # display status
+  timedatectl status
 }
 
 disk_partition() {
@@ -174,24 +176,28 @@ final_prompt() {
 
 create_swapfile() {
   # create swapfile and change its permission
-  fallocate -l "${1}GiB" /maidswap && chmod 600 /maidswap
+  arch-chroot /mnt fallocate -l "${1}GiB" /maidswap &&
+    arch-chroot /mnt chmod 600 /maidswap
   # make the swap and activate it
-  mkswap /maidswap && swapon /maidswap
+  arch-chroot /mnt mkswap /maidswap && arch-chroot /mnt swapon /maidswap
   # append the swapfile to the fstab file
-  echo "/maidswap none swap defaults 0 0" >> /etc/fstab
+  echo "/maidswap none swap defaults 0 0" >> /mnt/etc/fstab
+  # print the filesystem table to stdout
+  genfstab -U /mnt
 }
 
 create_user_account() {
   # create the user
-  if ! useradd -m -g wheel -s /usr/bin/zsh "$username"; then
-		usermod -a -G wheel "$username" &&
-    mkdir -p /home/"$username" && chown "$username":wheel /home/"$username"
+  if ! arch-chroot /mnt useradd -m -g wheel -s /usr/bin/zsh "$username"; then
+		arch-chroot /mnt usermod -a -G wheel "$username" &&
+      arch-chroot /mnt mkdir -p /home/"$username" &&
+        arch-chroot /mnt chown "$username":wheel /home/"$username"
   fi
   # set same password for the root user and the user
-  echo "root:$password" | chpasswd
-  echo "$username:$password" | chpasswd
+  arch-chroot /mnt echo "root:$password" | chpasswd
+  arch-chroot /mnt echo "$username:$password" | chpasswd
   # make zsh the default shell for the user
-  chsh -s /bin/zsh "$username" >/dev/null 2>&1
+  arch-chroot /mnt chsh -s /bin/zsh "$username" >/dev/null 2>&1
   unset password verify
 }
 
@@ -276,7 +282,7 @@ $(gum style --width 55 --align middle --bold --foreground 69 \
 [ "$(id -u)" -eq 0 ] || end "please run this script from the Arch Linux liveiso"
 
 # test for an internet connection and install gum
-pacman --needed --noconfirm -Sy gum >/dev/null 2>&1 ||
+pacman --noconfirm --needed -Sy gum >/dev/null 2>&1 ||
   end "pacman failed, please make sure you have an internet connection"
 
 welcome || end "bye bye"
@@ -328,7 +334,7 @@ done
 final_prompt || end "exited"
 
 # refresh archlinux keyring and install reflector
-pacman --noconfirm -S "archlinux-keyring reflector" ||
+pacman --needed --noconfirm -S archlinux-keyring reflector ||
   end "pacman failed, please make sure you have an internet connection"
 
 # update the mirror list using reflector to have the fastest servers
@@ -355,39 +361,38 @@ gum spin --spinner line --title "Installing essential packages..." -- \
   grub efibootmgr doas dash zsh git curl ca-certificates reflector networkmanager \
   neovim bluez bluez-utils cups
 
-### CONFIGURE THE SYSTEM ###
+### CONFIGURE THE NEW SYSTEM ###
 
 # generate a filesystem table (fstab) file using UUID
 genfstab -U /mnt >> /mnt/etc/fstab
-
-# change root into the new system
-arch-chroot /mnt
+# print fstab to stdout
+genfstab -U /mnt
 
 # create swapfile if recommended
 [ "$ramsize" -gt 0 ] && create_swapfile "$ramsize"
 
 # set the time zone
-ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
+arch-chroot /mnt ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
 
 # synchronize the system and hardware clock
-hwclock --systohc
+arch-chroot /mnt hwclock --systohc
 
 # uncomment and generate the needed locales
-sed -i "s/#en_US.UTF-8/en_US.UTF-8/" /etc/locale.gen
-sed -i "s/#ja_JP.UTF-8/ja_JP.UTF-8/" /etc/locale.gen
-gum spin --spinner line --title "Generating locales..." -- locale-gen
+arch-chroot /mnt sed -i "s/#en_US.UTF-8/en_US.UTF-8/" /etc/locale.gen
+arch-chroot /mnt sed -i "s/#ja_JP.UTF-8/ja_JP.UTF-8/" /etc/locale.gen
+arch-chroot /mnt locale-gen
 
 # persist the selected keymap and locales
-echo "KEYMAP=$keymap" > /etc/vconsole.conf
-echo "LANG=en_US.UTF-8" > /etc/locale.conf
+arch-chroot /mnt echo "KEYMAP=$keymap" > /etc/vconsole.conf
+arch-chroot /mnt echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
 ### NETWORK CONFIGURATION ###
 
 # create the hostname file
-echo "$hostname" > /etc/hostname
+arch-chroot /mnt echo "$hostname" > /etc/hostname
 
 # create the local hostname
-tee -a /etc/hosts >/dev/null << EOT
+arch-chroot /mnt tee -a /etc/hosts >/dev/null << EOT
 127.0.0.1    localhost
 ::1          localhost
 127.0.1.1    ${hostname}.localdomain $hostname
@@ -395,34 +400,32 @@ EOT
 
 ### CONFIGURATION ###
 
-# set the same password for the root and the user
-echo "root:$password" | passwd
+# create the user
+create_user_account
 
 # permit the wheel group to use doas with password
-echo "permit persist keepenv :wheel" > /etc/doas.conf
+arch-chroot /mnt echo "permit persist keepenv :wheel" > /etc/doas.conf
 
 # activate services
-systemctl enable NetworkManager
-systemctl enable bluetooth
-systemctl enable cups.service
-systemctl enable reflector.timer
+arch-chroot /mnt systemctl enable NetworkManager
+arch-chroot /mnt systemctl enable bluetooth
+arch-chroot /mnt systemctl enable cups.service
+arch-chroot /mnt systemctl enable reflector.timer
 
 ### BOOT LOADER ###
 
 # install GRUB
 gum spin --spinner line --show-output --title "Installing the GRUB boot loader..." -- \
+ arch-chroot /mnt \
   grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
 
 # generate a GRUB configuration file
 gum spin --spinner line --show-output --title "Generating GRUB config file..." -- \
-  grub-mkconfig -o /boot/grub/grub.cfg
+  arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
 
 ### FINALIZE ###
-
-# leave the chroot environment
-exit
 
 # installation complete
 gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
   "Installation complete. If there were no error messages, please reboot and login \
-as the user."
+as the $username or root."
