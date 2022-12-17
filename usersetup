@@ -1,6 +1,6 @@
 #!/usr/bin/sh
 
-[ "$(lsb_release -is)" = "Arch" ] || echo "this only works on Arch Linux" && exit 1
+# [ "$(lsb_release -is)" = "Arch" ] || echo "this only works on Arch Linux" && exit 1
 
 end() {
   printf '%s\n' "$1" >&2 && exit 1 # log to stderr and exit with failure
@@ -120,11 +120,22 @@ install_packages() {
 
 ### START ###
 
-if command -v sudo; then
-  gum spin --spinner line --title "Removing sudo..." -- pacman --noconfirm -Rns sudo
-else
-  end "failed to uninstall sudo, please manually do so"
-fi
+welcome || end "bye bye"
+
+get_username
+
+get_password
+
+if_user_exists || end "exited"
+
+create_user || end "something something went wrong at create_user"
+
+install_aur_helper || end "something went wrong at install_aur_helper"
+
+install_packages || end "something went wrong at install_packages"
+
+[ -n "$(command -v sudo)" ] && gum spin --spinner line --title "Removing sudo..." -- \
+  pacman --noconfirm -Rns sudo || echo "failed to uninstall sudo, please manually do so"
 
 tee /etc/doas.conf >/dev/null << EOF
 # permit members of the wheel group to perform actions as root and to:
