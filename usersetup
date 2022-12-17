@@ -1,0 +1,119 @@
+#!/usr/bin/sh
+
+[ "$(lsb_release -is)" = "Arch" ] || echo "this only works on Arch Linux" && exit 1
+
+end() {
+  printf '%s\n' "$1" >&2 && exit 1 # log to stderr and exit with failure
+}
+
+if command -v sudo; then
+  gum spin --spinner line --title "Removing sudo..." -- pacman --noconfirm -Rns sudo
+else
+  end "failed to uninstall sudo, please manually do so"
+fi
+
+tee /etc/doas.conf >/dev/null << EOF
+# permit members of the wheel group to perform actions as root and to:
+#   persist - not require confirmation by password for five minutes,
+#   keepenv - preserve their existing environment variables,
+#   setenv {} - access their locale
+permit persist keepenv setenv { LANG LC_ALL } :wheel
+
+# permit members of the wheel group to use the following commands without a password
+permit nopass :wheel as root cmd dmesg
+permit nopass :wheel as root cmd mount
+permit nopass :wheel as root cmd umount
+permit nopass :wheel as root cmd reboot
+permit nopass :wheel as root cmd shutdown
+permit nopass :wheel as root cmd loadkeys
+permit nopass :wheel as root cmd pacman args -S
+permit nopass :wheel as root cmd pacman args -Sy
+permit nopass :wheel as root cmd pacman args -Syu
+permit nopass :wheel as root cmd pacman args -Rns
+
+EOF
+
+# the owner and group should both be 0, file permissions should be set to 0400
+chown -c root:root /etc/doas.conf
+chmod -c 0400 /etc/doas.conf
+
+# check for syntax errors as it is imperative that /etc/doas.conf is error free
+doas doas -C /etc/doas.conf >&2 || end "please fix the syntax error before proceeding"
+
+# set up the reflector service
+tee /etc/xdg/reflector/reflector.conf >/dev/null << EOF
+# reflector configuration file for the systemd service
+# reflector --protocol https --country US --latest 45 --fastest 15 --save /etc/pacman.d/mirrorlist
+
+# get the most recent mirrors with the highest download speed over https in the US
+--protocol https
+--country US
+--latest 45
+--fastest 15
+
+# save the results to the following file
+--save /etc/pacman.d/mirrorlist
+EOF
+
+# enable the reflector timer to run reflector periodically (weekly by default)
+systemctl enable reflector.timer
+
+# source zsh startup files from a different location at startup
+tee -a /etc/zsh/zshenv >/dev/null << EOF
+for z in zshenv zprofile zshrc; do
+  # source in the same order as indicated in zsh(1)
+  [ -f "\$HOME/.config/zsh/\$z" ] && source "\$HOME/.config/zsh/\$z"
+done && unset z
+EOF
+
+# enable the multilib repository
+sed -i '/^#.multilib]$/s/^#//;/^.multilib]$/{n;s/^#//}' /etc/pacman.conf
+
+# configure pacman misc options
+sed -i '/^#Color/s/^#//;/^#ILoveCandy/s/^#//;/^#ParallelDownloads/s/^#//' /etc/pacman.conf
+
+# shellcheck disable=2016
+# use all cores when compiling packages with makepkg
+sed -i '/^#MAKEFLAGS/s/^#//;s/-j2/-j$(nproc)/' /etc/makepkg.conf
+
+# beep begone!
+rmmod pcspkr
+echo "blacklist pcspkr" >/etc/modprobe.d/nobeep.conf
+
+# package name: xorg-xinit
+# configure startx options if on X
+if [ -n "$(command -v xinit)" ]; then
+  # set up the xinitrc script
+  tee /etc/X11/xinit/xinitrc >/dev/null << EOF
+#!/bin/sh
+
+# startx is a front-end for xinit and it is typically used to start window managers
+# or desktop environments. It will look for '~/.xinitrc' to run as a shell script to
+# start up client programs. But if it does not exit, it will default to
+# '/etc/X11/xinit/xinitrc'.
+
+# startx can run xinitrc from a different location by using the XINITRC environment variable
+[ -f "\$XINITRC" ] && alias startx="startx \$XINITRC"
+
+# scripts in xinitrc.d are used to set an environment and define application-specific settings
+if [ -d /etc/X11/xinit/xinitrc.d ]; then
+  for s in /etc/X11/xinit/xinitrc.d/?*.sh; do
+    [ -x "\$s" ] && source "\$s"
+  done && unset s
+fi
+EOF
+
+  # set up the xserverrc script
+  tee /etc/X11/xinit/xserverrc >/dev/null << EOF
+#!/bin/sh
+
+# xserverrc is the shell script responsible for starting up the X server.
+# startx will look for '~/.xserverrc' or otherwise default to '/etc/X11/xinit/xserverrc'.
+
+# maintain an authenticated session with logind and to prevent bypassing the screen locker
+exec /usr/bin/Xorg -nolisten tcp -nolisten local "\$@" vt\$XDG_VTNR
+
+# the '-nolisten local' option disables abstract sockets of X11 to help with isolation
+# the '\$XDG_VTNR' option makes it so that Xorg cannot be started from another session
+EOF
+fi

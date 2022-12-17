@@ -1,0 +1,125 @@
+# REPO,PACKAGE,DESCRIPTION
+# The repo column determines the repository of the package:
+#   R - Arch Repository
+#   U - Arch User Repository (AUR)
+# (https://github.com/swaywm/sway/wiki/Useful-add-ons-for-sway)
+# (https://github.com/natpen/awesome-wayland#wallpaper)
+
+# USER PACKAGES
+R,exa,"is a modern replacement for ls."
+R,imv,"is an image viewer for Wayland and X11."
+R,mpv,"is a cross-platform media player."
+R,bat,"is cat clone with syntax highlighting and git integration."
+R,xplr,"is a TUI file explorer."
+R,fcitx5,"is an input method framework with extension support."
+R,fcitx5-mozc,"is a Japanese Input Method based on Google Japanese Input."
+U,jisho,"is a simple CLI tool to lookup Japanese words using jisho.org."
+R,firefox,"is a standalone web browser."
+R,alacritty,"is an OpenGL-based terminal emulator."
+R,keepassxc,"is a cross-platform community-driven password manager."
+R,neovim,"is an extensible text editor forked from Vim."
+R,syncthing,"is a tool for synchronizing files across devices."
+R,xournalpp,"is a notetaking software with PDF annotation support."
+R,gimp,"is a handy image manipulation program."
+R,ffmpeg,"is a complete solution to record, convert and stream audio and video."
+# R,blender,"is a fully integrated 3D graphics creation suite."
+# R,obs-studio,"is a software for live streaming and recording."
+
+# WAYLAND
+R,wayland,"is a modern computer display server protocol."
+R,wl-clipboard,"are clipboard utilities for Wayland compositors."
+R,sway,"is a tiling Wayland compositor and window manager."
+R,mako,"is a lightweight notification daemon for Wayland."
+R,gammastep,"is a tool to adjust screen color temperature on Wayland."
+R,wtype,"is an utility to fake mouse/keyboard actions on Wayland."
+R,wofi,"is a launcher/menu program for Wayland compositors."
+R,swaybg,"is a wallpaper tool for Wayland compositors."
+R,swayidle,"is an idle management daemon for Wayland compositors."
+# R,wf-recorder,"is a screen recorder for Wayland compositors."
+# R,fuzzel,"is a application launcher for Wayland compositors."
+
+# AUDIO
+R,pipewire,"is a low-latency audio/video router and processor."
+R,lib32-pipewire,"is PipeWire but for multilib support."
+R,wireplumber,"is an audio session manager for PipeWire."
+R,pipewire-alsa,"routes ALSA API through PipeWire."
+R,pipewire-pulse,"routes PulseAudio API through PipeWire."
+
+# FONTS
+# R,ttf-dejavu,"is a font family based on the Bitstream Vera Fonts."
+# U,nerd-fonts-dejavu-complete,"provides all variants of DejaVu Sans Mono nerd-font patched."
+R,otf-fira-mono,"provides monospace typeface by Mozilla."
+R,otf-fira-sans,"provides sans-serif typeface by Mozilla."
+R,ttf-nerd-fonts-symbols-2048-em,"provides all the glyphs from the nerd font library."
+R,otf-ipafont,"are Japanese outline fonts by IPA."
+R,otf-ipaexfont,"are Japanese outline fonts based on traditional printing fonts."
+R,otf-ipamjfont,"are Japanese outline Mincho fonts based on IPAex Mincho."
+# U,ttf-kanjistrokeorders,"is needed to display Kanji stroke order in Anki."
+R,noto-fonts-cjk,"provides Chinese, Japanese, Korean (CJK) fonts by Google."
+R,noto-fonts-emoji,"provides Noto emoji fonts by Google."
+
+# TOOLS
+# R,jq,"is a commandline JSON processor."
+R,fd,"is a fast and user-friendly alternative to find."
+R,fzf,"is a fuzzy finder tool."
+R,gum,"is a tool for glamarous shell scripts."
+R,curl,"is an URL retrieval utility and library."
+R,wget,"is a network utility to retrieve files from the web. "
+R,atool,"is a script for managing various file archives."
+R,unzip,"is a tool to extract and view .zip archives."
+R,man-db,"is an utility for reading man pages."
+R,ntfs-3g,"is a tool to access NTFS partitions."
+U,cpufetch,"is a fancy CPU architecture fetching tool."
+R,mediainfo,"is an utility to display information about media files."
+U,simple-mtpfs,"is a tool to mount cell phones."
+R,android-tools,"are the Android platform tools including adb."
+# R,ffmpegthumbnailer,"is a fast video thumbnailer that can be used by file managers."
+# R,lynx,"is a terminal browser."
+# R,unrar,"is a tool to extract and view .rar archives."
+# R,lf,"is an extensive terminal file manager."
+# R,mpd,"is a lightweight music daemon."
+# R,mpc,"is a terminal interface for mpd."
+# R,ncmpcpp,"a ncurses interface for music with multiple formats and a powerful tag editor."
+# R,flameshot,"can take quick screenshots at your request."
+# R,dosfstools,"are a set of utilities to access DOS filesystems."
+# R,libnotify,"is a library for displaying notifications."
+# R,dunst,"is a customizable notification-daemon."
+
+
+
+# PROGRAMMING LANGUAGES
+R,go,"are the core compiler tools for the Go programming language."
+R,rust,"is a systems language focused on safety, speed and concurrency."
+R,python,"is a high-level scripting language."
+R,python-pip,"is a package manager for Python."
+# R,npm,"is needed to install LSP for neovim."
+
+# R,gnome-keyring,"serves as the system keyring."
+# R,newsboat,"is a terminal RSS client."
+# R,youtube-dl,"can download any YouTube video (or playlist or channel) when given the link."
+# R,zathura,"is a pdf viewer with vim-like bindings."
+# R,zathura-pdf-mupdf,"allows mupdf pdf compatibility in zathura."
+# R,poppler,"manipulates PDFs and gives PDF previews and other PDF functions."
+# R,highlight,"can highlight code output."
+
+# R,zsh-autosuggestions,"provides virtual text suggestions in the shell."
+# U,zsh-fast-syntax-highlighting,"provides syntax highlighting in the shell."
+# U,task-spooler,"queues commands or files for download."
+# U,htop-vim-git,"is a graphical and colorful system monitor."
+# U,mutt-wizard-git,"is a light-weight terminal-based email system."
+# U,abook,"is an offline addressbook usable by neomutt."
+
+
+# X11
+# R,xorg-server,"is the X graphical server."
+# R,xorg-xinit,"is an utility to initialize X.Org."
+# R,xorg-xprop,"is a window property displayers for X."
+# R,xorg-xwininfo,"is a window information utility for X."
+# R,xorg-xdpyinfo,"is a display information utility for X."
+# R,xorg-xbacklight,"is an utility to change screen brightness."
+# R,xdotool,"is a tool to fake mouse/keyboard action on X."
+# R,picom,"is a compositor for X11 (transparency and no screen-tearing)."
+# R,xsel,"is a clipboard utility for X."
+# R,unclutter,"is a tool for hiding an inactive mouse on X."
+# R,slock,"is a simple screen locker for X."
+# R,xwallpaper,"is a wallpaper setting utility for X."
