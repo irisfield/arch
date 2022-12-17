@@ -197,17 +197,22 @@ create_swapfile() {
 }
 
 install_paru() {
-  repodir="/home/${username}/.cache/paru/clone"
-  arch-chroot /mnt sudo -u "$username" mkdir -p "/mnt/${repodir}/paru"
+  trap 'rm -rf /mnt/tmp/paru' HUP INT QUIT TERM PWR EXIT
+  # install packages needed
+  arch-chroot /mnt sudo -u "$username" pacman --noconfirm -S curl ca-certificates
+  # create temp directory to download paru
+  arch-chroot /mnt sudo -u "$username" mkdir -p "/tmp/paru"
+  # clone the paru-bin package from the AUR
   arch-chroot /mnt sudo -u "$username" git clone --single-branch --depth 1 --no-tags -q \
-    "https://aur.archlinux.org/paru-bin.git" "/mnt/${repodir}/paru" ||
-    {
-      cd "/mnt/$repodir/paru" || return 1
-      arch-chroot /mnt sudo -u "$username" git pull --force origin master
-    }
-  cd "/mnt/$repodir/paru" || exit 1
-  arch-chroot /mnt sudo -u "$username" -D "$repodir/paru" \
-    makepkg --noconfirm -si > /dev/null 2>&1 || return 1
+    "https://aur.archlinux.org/paru-bin.git" "/tmp/paru"
+  # extract the version number of the most recent version
+  pkgver="$(awk -F"[=]" '/pkgver=/{print $2}' /mnt/tmp/paru/PKGBUILD)"
+  pkgname="paru-v${pkgver}-x86_64.tar.zst"
+  url="https://github.com/Morganamilo/paru/releases/download/v${pkgver}/${pkgname}"
+  # download the package from github
+  arch-chroot /mnt sudo -u "$username" curl -L -o "/tmp/paru/${pkgname}" "$url"
+  # install it using pacman
+  arch-chroot /mnt sudo -u "$username" pacman -U "/tmp/paru/${pkgname}"
 }
 
 ### START OF THE SCRIPT ###
@@ -304,7 +309,8 @@ header "Installing packages"
 # install the essential packages
 gum spin --spinner line --title "Installing core packages..." -- \
   pacstrap -K /mnt linux linux-firmware linux-headers base base-devel ${vendor}-ucode \
-    grub efibootmgr doas dash zsh gum reflector networkmanager neovim terminus-font
+    grub efibootmgr git zsh gum doas dash reflector networkmanager neovim terminus-font ||
+      end "core packages failed, please make sure you have an internet connection"
 
 # to allow connecting to the internet on reboot
 arch-chroot /mnt systemctl enable NetworkManager
@@ -418,7 +424,7 @@ arch-chroot /mnt systemctl stop reflector.timer
 ### PACKAGES ###
 
 # install AUR helper
-install_paru
+install_paru || end "something went wrong at install_paru"
 
 ### BOOT LOADER ###
 
