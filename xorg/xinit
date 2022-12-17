@@ -1,0 +1,39 @@
+#!/usr/bin/sh
+
+# package name: xorg-xinit
+# configure startx options if on X
+if [ -n "$(command -v xinit)" ]; then
+  # set up the xinitrc script
+  tee /etc/X11/xinit/xinitrc >/dev/null << EOF
+#!/bin/sh
+
+# startx is a front-end for xinit and it is typically used to start window managers
+# or desktop environments. It will look for '~/.xinitrc' to run as a shell script to
+# start up client programs. But if it does not exit, it will default to
+# '/etc/X11/xinit/xinitrc'.
+
+# startx can run xinitrc from a different location by using the XINITRC environment variable
+[ -f "\$XINITRC" ] && alias startx="startx \$XINITRC"
+
+# scripts in xinitrc.d are used to set an environment and define application-specific settings
+if [ -d /etc/X11/xinit/xinitrc.d ]; then
+  for s in /etc/X11/xinit/xinitrc.d/?*.sh; do
+    [ -x "\$s" ] && source "\$s"
+  done && unset s
+fi
+EOF
+
+  # set up the xserverrc script
+  tee /etc/X11/xinit/xserverrc >/dev/null << EOF
+#!/bin/sh
+
+# xserverrc is the shell script responsible for starting up the X server.
+# startx will look for '~/.xserverrc' or otherwise default to '/etc/X11/xinit/xserverrc'.
+
+# maintain an authenticated session with logind and to prevent bypassing the screen locker
+exec /usr/bin/Xorg -nolisten tcp -nolisten local "\$@" vt\$XDG_VTNR
+
+# the '-nolisten local' option disables abstract sockets of X11 to help with isolation
+# the '\$XDG_VTNR' option makes it so that Xorg cannot be started from another session
+EOF
+fi
