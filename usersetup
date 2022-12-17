@@ -94,7 +94,7 @@ get_packages() {
   if [ -f "./packages.csv" ]; then
     trap 'rm -f /packages.csv' EXIT HUP INT QUIT TERM
     # extract all the valid entries from the file
-    grep '^[RU],[^,]\+,[^,]\+$' packages.csv > /tmp/packages.csv
+    grep '^[RU],[^,]\+,".*"$' packages.csv > /tmp/packages.csv
     # remove any inline '#' comments
     sed -i "s/\s*#[^\"']*$//" /tmp/packages.csv
   else
