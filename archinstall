@@ -87,7 +87,9 @@ disk_partition() {
     diskname=$(lsblk -Alpn -o NAME,SIZE,TYPE | grep 'disk' | gum filter \
       --prompt.foreground 93 --prompt.bold --prompt "Disk name: " \
       --placeholder "(name of disk to partition)" | cut -d' ' -f1)
-  done &&
+  done
+  # nvme drives uses the 'p' label for each partition
+  label=$(echo "$diskname" | grep -q "nvme" && printf '%s' "p")
   # show the recommended layout and prompt the user
   gum confirm --prompt.foreground 99 --prompt.border-foreground 105 \
     --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border thick \
@@ -95,8 +97,8 @@ disk_partition() {
     --default "$(gum format -t markdown "# Recommended Partition Layout
 Mountpoint|Partition|ID Type|Suggested Size
 -|-|-|-
-/mnt/boot|${diskname}1|ef EFI|512 MiB
-/mnt|${diskname}2|83 Linux|Remaining size")
+/mnt/boot|${diskname}${label}1|ef EFI|512 MiB
+/mnt|${diskname}${label}2|83 Linux|Remaining size")
 
 Only an EFI and root partition is $(gum style --bold 'required').
 You may also opt to partition the disk in any other way.
