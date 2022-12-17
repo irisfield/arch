@@ -1,7 +1,6 @@
 #!/usr/bin/env sh
 
-# This script is meant to be used from the Arch Linux liveiso.
-# It will walk you through the installation process for Arch Linux.
+# This script is intended to be used from the archiso.
 
 ### HELPERS ###
 
@@ -13,7 +12,7 @@ install() {
   pacman --noconfirm --needed -S "$1" >/dev/null 2>&1
 }
 
-heading() {
+header() {
   gum style --bold --foreground 99 "$1"
 }
 
@@ -106,7 +105,7 @@ get_efi_partition() {
     # choose the name of the EFI partition
     efipartition=$(lsblk -Alpn -o NAME,SIZE,TYPE | grep "${diskname##*/}.*part" | \
       gum filter --prompt.foreground 93 --prompt.bold --prompt "EFI partition: " \
-        --placeholder "(select the EFI partition" | cut -d' ' -f1)
+        --placeholder "(select the EFI partition)" | cut -d' ' -f1)
   done &&
   # confirm whether or not to format the efi partition
   gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
@@ -171,7 +170,7 @@ final_prompt() {
 }
 
 create_swapfile() {
-  heading "Making swapfile"
+  header "Making swapfile"
   # create swapfile and change its permission
   arch-chroot /mnt fallocate -l "${1}GiB" /maidswap &&
     arch-chroot /mnt chmod 600 /maidswap
@@ -242,23 +241,24 @@ done
 
 final_prompt || end "exited"
 
-heading "Updating archlinux-keyring"
+header "Updating archlinux-keyring"
 
 # refresh archlinux keyring and install reflector if missing
 pacman --needed --noconfirm -S archlinux-keyring reflector ||
   end "pacman failed, please make sure you have an internet connection"
 
-heading "Updating mirrors using reflector"
+header "Updating mirrors using reflector"
 
 # update the mirror list using reflector to have the fastest servers
 reflector --protocol https --country US --age 6 --latest 45 --fastest 15 \
   --save /etc/pacman.d/mirrorlist >/dev/null 2>&1 && pacman -Sy ||
     printf '%s\n' "reflector failed, skipping..."
 
-heading "Formatting partitions"
+header "Formatting partitions"
 
 # format the partitions
-mkfs.ext4 "$rootpartition" && [ "$formatefi" = "yes" ] && mkfs.fat -F 32 "$efipartition"
+mkfs.ext4 "$rootpartition" && [ "$formatefi" = "yes" ] &&
+  mkfs.fat -F 32 "$efipartition" || end "error formatting the partitions"
 
 # mount the partitions
 mount "$rootpartition" /mnt && mount --mkdir "$efipartition" /mnt/boot
@@ -266,7 +266,7 @@ mount "$rootpartition" /mnt && mount --mkdir "$efipartition" /mnt/boot
 # detect cpu vendor
 lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
 
-heading "Installing packages"
+header "Installing packages"
 
 # install the essential packages
 gum spin --spinner line --show-output --title "Installing essential packages..." -- \
@@ -274,9 +274,16 @@ gum spin --spinner line --show-output --title "Installing essential packages..."
     grub efibootmgr doas dash zsh git curl ca-certificates reflector networkmanager \
     neovim bluez bluez-utils cups
 
+# activate services
+arch-chroot /mnt systemctl enable NetworkManager
+arch-chroot /mnt systemctl stop NetworkManager
+# arch-chroot /mnt systemctl enable bluetooth
+# arch-chroot /mnt systemctl enable cups.service
+# arch-chroot /mnt systemctl enable reflector.timer
+
 ### CONFIGURE THE NEW SYSTEM ###
 
-heading "Generating filesystem table"
+header "Generating filesystem table"
 
 # generate a filesystem table (fstab) file using UUID
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -292,7 +299,7 @@ arch-chroot /mnt ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
 # synchronize the system and hardware clock
 arch-chroot /mnt hwclock --systohc
 
-heading "Generating locale"
+header "Generating locale"
 
 # uncomment and generate the needed locales
 sed -i "s/#en_US.UTF-8/en_US.UTF-8/" /mnt/etc/locale.gen
@@ -318,20 +325,15 @@ EOT
 ### CONFIGURATION ###
 
 # set password for the root user
-arch-chroot /mnt echo "root:$password" | chpasswd && unset password verify
+echo "root:$password" | arch-chroot /mnt chpasswd
+# unset password verify
 
 # permit the wheel group to use doas with password
 echo "permit persist keepenv :wheel" > /mnt/etc/doas.conf
 
-# activate services
-arch-chroot /mnt systemctl enable NetworkManager
-arch-chroot /mnt systemctl enable bluetooth
-arch-chroot /mnt systemctl enable cups.service
-arch-chroot /mnt systemctl enable reflector.timer
-
 ### BOOT LOADER ###
 
-heading "GRUB"
+header "GRUB"
 
 # install GRUB
 arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
@@ -340,6 +342,9 @@ arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootlo
 arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
 
 ### FINALIZE ###
+
+# unmount the partitions
+umount /mnt/boot && umount /mnt
 
 # installation complete
 gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
