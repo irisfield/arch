@@ -1,0 +1,194 @@
+#!/usr/bin/sh
+
+[ "$(lsb_release -is)" = "Arch" ] || echo "this only works on Arch Linux" && exit 1
+
+end() {
+  printf '%s\n' "$1" >&2 && exit 1 # log to stderr and exit with failure
+}
+
+welcome() {
+  gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
+    --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border double \
+    --prompt.align center --affirmative "Continue" --negative "End" \
+    --default "Welcome to irisfield's Arch Linux RICE installer.
+This script installs a minimal Linux desktop using irisfield's dotfiles."
+}
+
+
+get_username() {
+  username=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Account name: " \
+    --placeholder "(enter a name for the user account)")
+  while ! echo "$username" | grep -q "^[a-z_][a-z0-9_-]*$"; do
+    username=$(gum input --prompt.foreground 99 --prompt.bold \
+      --prompt "Try again. Account name: " \
+      --placeholder "(only lowercase letters, - and _ are allowed)")
+  done
+}
+
+get_password() {
+  password=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Password: " \
+    --password --placeholder "(enter a password for $username)")
+  verify=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Verify: " \
+    --password --placeholder "(retype the password)")
+  while ! [ "$password" = "$verify" ]; do
+    unset verify
+    password=$(gum input --prompt.foreground 99 --prompt.bold \
+      --prompt "Try again. Password: " --password \
+      --placeholder "(enter a password for the root user)")
+    verify=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Verify: " \
+      --password --placeholder "(retype the password)")
+  done
+}
+
+if_user_exists() {
+  if id -u "$username" >/dev/null 2>&1; then
+    gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
+      --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border thick \
+      --prompt.align center --affirmative "Proceed" --negative "Exit" \
+      --default "$(gum style --bold --foreground 124 "WARNING")
+The user '$username' already exists on this system! \
+Would you like to proceed with the installation and overwrite conflicting \
+settings and dotfiles for this user?" &&
+    gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
+      --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border thick \
+      --prompt.align center --negative "Exit" \
+      --default "$(gum style --bold --foreground 124 "WARNING")
+Settings and dotfiles aside, no other file in the home directory will be affected. \
+Note that this will change the user's password to the new one.
+$(gum style --width 55 --align middle --bold --foreground 69 \
+  'Are you sure you would like to proceed?')"
+  fi
+}
+
+create_user() {
+  # create the user
+	useradd -m -g wheel -s /usr/bin/zsh "$username" || usermod -a -G wheel "$username" &&
+    mkdir -p /home/"$name" && chown "$name":wheel /home/"$name"
+  # set same password for the root user and the user
+  echo "$username:$password" | chpasswd && unset password verify
+  # make zsh the default shell for the user
+  # chsh -s /usr/bin/zsh "$username" >/dev/null 2>&1
+}
+
+install_aur_helper() {
+  parudir="/home/$username/.cache/paru/clone"
+  mkdir -p "$parudir" && chown -R "$username":wheel "${parudir%/*/*}"
+  # gum spin --spinner line --show-output --title "Installing paru, an AUR helper..." -- \
+  doas -u "$username" git -C "$parudir" clone -q "https://aur.archlinux.org/paru.git" &&
+    cd "${parudir}/paru" && doas -u "$username" makepkg --noconfirm -si
+}
+
+main_install() {
+  mpk=$(printf '\n%b %b' "\033[1m$1\033[21m" "$2")
+  gum spin --spinner line --title "($n/$total) Installing $1.$mpk" -- \
+    pacman --noconfirm --needed -S "$1"
+}
+
+paru_install() {
+  apk=$(printf '\n%b %b' "\033[1m$1\033[0m" "$2")
+  gum spin --spinner line --title "($n/$total) Installing $1 from the AUR.$apk" -- \
+    doas -u "$username" paru --noconfirm --needed -S "$1"
+}
+
+get_packages() {
+  if [ -f "./packages.csv" ]; then
+    trap 'rm -f /packages.csv' EXIT HUP INT QUIT TERM
+    # extract all the valid entries from the file
+    grep '^[RU],[^,]\+,[^,]\+$' packages.csv > /tmp/packages.csv
+    # remove any inline '#' comments
+    sed -i "s/\s*#[^\"']*$//" /tmp/packages.csv
+  else
+    printf '%b\n' "This directory does not have a \033[37mpackages.csv\033[0m file!"
+    return 1
+  fi
+}
+
+install_packages() {
+  if get_packages; then
+    total=$(wc -l < /tmp/packages.csv) && n=0
+    while IFS=, read -r repo package description; do
+      n=$((n + 1))
+      echo "$description" | grep -q "^\".*\"$" &&
+        description="$(echo "$description" | sed -E "s/(^\"|\"$)//g")"
+      case "$repo" in
+        "R") main_install "$package" "$description" && n=$((n + 1)) ;;
+        "U") paru_install "$package" "$description" && n=$((n + 1)) ;;
+      esac
+    done < /tmp/packages.csv
+  fi
+}
+
+### START ###
+
+if command -v sudo; then
+  gum spin --spinner line --title "Removing sudo..." -- pacman --noconfirm -Rns sudo
+else
+  end "failed to uninstall sudo, please manually do so"
+fi
+
+tee /etc/doas.conf >/dev/null << EOF
+# permit members of the wheel group to perform actions as root and to:
+#   persist - not require confirmation by password for five minutes,
+#   keepenv - preserve their existing environment variables,
+#   setenv {} - access their locale
+permit persist keepenv setenv { LANG LC_ALL } :wheel
+
+# permit members of the wheel group to use the following commands without a password
+permit nopass :wheel as root cmd dmesg
+permit nopass :wheel as root cmd mount
+permit nopass :wheel as root cmd umount
+permit nopass :wheel as root cmd reboot
+permit nopass :wheel as root cmd shutdown
+permit nopass :wheel as root cmd loadkeys
+permit nopass :wheel as root cmd pacman args -S
+permit nopass :wheel as root cmd pacman args -Sy
+permit nopass :wheel as root cmd pacman args -Syu
+permit nopass :wheel as root cmd pacman args -Rns
+
+EOF
+
+# the owner and group should both be 0, file permissions should be set to 0400
+chown -c root:root /etc/doas.conf && chmod -c 0400 /etc/doas.conf
+
+# check for syntax errors as it is imperative that /etc/doas.conf is error free
+doas doas -C /etc/doas.conf >&2 || end "please fix the syntax error before proceeding"
+
+# set up the reflector service
+tee /etc/xdg/reflector/reflector.conf >/dev/null << EOF
+# reflector configuration file for the systemd service
+# reflector --protocol https --country US --latest 45 --fastest 15 --save /etc/pacman.d/mirrorlist
+
+# get the most recent mirrors with the highest download speed over https in the US
+--protocol https
+--country US
+--latest 45
+--fastest 15
+
+# save the results to the following file
+--save /etc/pacman.d/mirrorlist
+EOF
+
+# enable the reflector timer to run reflector periodically (weekly by default)
+systemctl enable reflector.timer
+
+# source zsh startup files from a different location at startup
+tee -a /etc/zsh/zshenv >/dev/null << EOF
+for z in zshenv zprofile zshrc; do
+  # source in the same order as indicated in zsh(1)
+  [ -f "\$HOME/.config/zsh/\$z" ] && source "\$HOME/.config/zsh/\$z"
+done && unset z
+EOF
+
+# enable the multilib repository
+sed -i '/^#.multilib]$/s/^#//;/^.multilib]$/{n;s/^#//}' /etc/pacman.conf
+
+# configure pacman misc options
+sed -i '/^#Color/s/^#//;/^#ILoveCandy/s/^#//;/^#ParallelDownloads/s/^#//' /etc/pacman.conf
+
+# shellcheck disable=2016
+# use all cores when compiling packages with makepkg
+sed -i '/^#MAKEFLAGS/s/^#//;s/-j2/-j$(nproc)/' /etc/makepkg.conf
+
+# beep begone!
+rmmod pcspkr
+echo "blacklist pcspkr" >/etc/modprobe.d/nobeep.conf
