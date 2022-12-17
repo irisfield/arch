@@ -182,8 +182,7 @@ final_prompt() {
 create_swapfile() {
   header "Making swapfile"
   # create swapfile and change its permission
-  arch-chroot /mnt fallocate -l "${1}GiB" /maidswap &&
-    arch-chroot /mnt chmod 600 /maidswap
+  fallocate -l "${1}GiB" /maidswap && chmod 600 /maidswap
   # make the swap and activate it
   arch-chroot /mnt mkswap /maidswap && arch-chroot /mnt swapon /maidswap
   # append the swapfile to the fstab file
@@ -212,7 +211,7 @@ install_paru() {
     "/${parudir#/*/}"/paru --noconfirm -Sy paru-bin > /dev/null 2>&1 &&
       echo "installed paru"
   # clean up
-  rm -rf "$parudir"
+  rm -rf "$parudir" && unset parudir
 }
 
 install_packages() {
@@ -226,7 +225,7 @@ install_packages() {
     return 1
   fi
   # total number of packages
-  total=$(wc -l < /tmp/packages.csv) && n=0
+  total=$(wc -l < /mnt/tmp/packages.csv) && n=0
   # installation loop
   while IFS=, read -r repo pkg desc; do
     echo "$desc" | grep -q "^\".*\"$" && desc="$(echo "$desc" | sed -E "s/(^\"|\"$)//g")"
@@ -339,7 +338,7 @@ mount "$rootpartition" /mnt && mount --mkdir "$efipartition" /mnt/boot
 # detect cpu vendor
 lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
 
-header "Installing packages"
+header "Installing core packages"
 
 # install the core packages
 gum spin --spinner line --title "Installing core packages..." -- pacstrap -K /mnt \
