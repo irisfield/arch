@@ -100,10 +100,10 @@ Mountpoint|Partition|ID Type|Suggested Size
 /mnt/boot|${diskname}${label}1|ef EFI|512 MiB
 /mnt|${diskname}${label}2|83 Linux|Remaining size")
 
-Only an EFI and root partition is $(gum style --bold 'required').
+Only an EFI and root partition are required.
 You may also opt to partition the disk in any other way.
 $(gum style --align center --bold --foreground 69 \
-'Would you like to partition the disk?')" && cfdisk "$diskname" || return 0
+'Would you like to partition the disk?')" && unset label && cfdisk "$diskname" || return 0
 }
 
 get_efi_partition() {
@@ -159,7 +159,7 @@ input_confirmation() {
     --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border rounded \
     --default "$(gum format -t markdown "username|password|hostname|keymap|timezone
 -|-|-|-|-
-root|$hidden|$hostname|$keymap|$timezone
+$username|$hidden|$hostname|$keymap|$timezone
 
 disk|efi part|format|root part|swap
 -|-|-|-|-
@@ -339,12 +339,19 @@ final_prompt || end "exited"
 pacman --needed --noconfirm -S archlinux-keyring reflector ||
   end "pacman failed, please make sure you have an internet connection"
 
-# update the mirror list using reflector to have the fastest servers
-gum spin --spinner line --title "Updating mirrors..." -- \
-  reflector --protocol https --country US --age 6 --latest 45 --fastest 15 \
-    --save /etc/pacman.d/mirrorlist >/dev/null 2>&1 && pacman -Sy >/dev/null 2>&1 ||
-      printf '%s\n' "reflector failed, skipping..."
+# heading
+gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
+  "Updating mirrors using reflector"
 
+# update the mirror list using reflector to have the fastest servers
+reflector --protocol https --country US --age 6 --latest 45 --fastest 15 \
+  --save /etc/pacman.d/mirrorlist >/dev/null 2>&1 && pacman -Sy ||
+    printf '%s\n' "reflector failed, skipping..."
+
+
+# heading
+gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
+  "Filesystem table (fstab) file"
 
 # format the partitions
 gum spin --spinner line --show-output --title "Formatting the partitions..." -- \
@@ -365,6 +372,10 @@ gum spin --spinner line --title "Installing essential packages..." -- \
 
 ### CONFIGURE THE NEW SYSTEM ###
 
+# heading
+gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
+  "Filesystem table (fstab) file"
+
 # generate a filesystem table (fstab) file using UUID
 genfstab -U /mnt >> /mnt/etc/fstab
 # print fstab to stdout
@@ -378,6 +389,9 @@ arch-chroot /mnt ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
 
 # synchronize the system and hardware clock
 arch-chroot /mnt hwclock --systohc
+
+gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
+  "Locale"
 
 # uncomment and generate the needed locales
 arch-chroot /mnt sed -i "s/#en_US.UTF-8/en_US.UTF-8/" /etc/locale.gen
@@ -402,6 +416,9 @@ EOT
 
 ### CONFIGURATION ###
 
+gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
+  "Create user account for root and $username"
+
 # create the user
 create_user_account
 
@@ -415,19 +432,19 @@ arch-chroot /mnt systemctl enable cups.service
 arch-chroot /mnt systemctl enable reflector.timer
 
 ### BOOT LOADER ###
+# heading
+gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
+  "GRUB boot loader"
 
 # install GRUB
-gum spin --spinner line --show-output --title "Installing the GRUB boot loader..." -- \
- arch-chroot /mnt \
-  grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
 
 # generate a GRUB configuration file
-gum spin --spinner line --show-output --title "Generating GRUB config file..." -- \
-  arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
+arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
 
 ### FINALIZE ###
 
 # installation complete
 gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
   "Installation complete. If there were no error messages, please reboot and login \
-as the $username or root."
+as root or as $username."
