@@ -80,9 +80,9 @@ disk_partition() {
     # choose the disk to partition
     diskname=$(lsblk -Alpn -o NAME,SIZE,TYPE | grep 'disk' | gum filter \
       --prompt.foreground 93 --prompt.bold --prompt "Disk name: " \
-      --placeholder "(name of disk to partition)" | cut -d' ' -f1)
+      --placeholder "(select the disk to partition)" | cut -d' ' -f1)
   done
-  # nvme drives uses the 'p' label for each partition
+  # nvme drives uses the 'p' label for the partition
   label=$(echo "$diskname" | grep -q "nvme" && printf '%s' "p")
   # show the recommended layout and prompt the user
   gum confirm --prompt.foreground 99 --prompt.border-foreground 105 \
@@ -104,9 +104,9 @@ get_efi_partition() {
   efipartition=""
   while [ -z "$efipartition" ]; do
     # choose the name of the EFI partition
-    efipartition=$(lsblk -Alpn -o NAME,SIZE,TYPE | grep 'part' | gum filter \
-      --prompt.foreground 93 --prompt.bold --prompt "EFI partition: " \
-      --placeholder "(name of the EFI partition" | cut -d' ' -f1)
+    efipartition=$(lsblk -Alpn -o NAME,SIZE,TYPE | grep "${diskname##*/}.*part" | \
+      gum filter --prompt.foreground 93 --prompt.bold --prompt "EFI partition: " \
+        --placeholder "(select the EFI partition" | cut -d' ' -f1)
   done &&
   # confirm whether or not to format the efi partition
   gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
@@ -124,9 +124,9 @@ get_root_partition() {
   rootpartition=""
   while [ -z "$rootpartition" ]; do
     # choose the name of the root partition
-    rootpartition=$(lsblk -Alpn -o NAME,SIZE,TYPE | grep 'part' | gum filter \
-      --prompt.foreground 93 --prompt.bold --prompt "Root partition: " \
-      --placeholder "(name of the root (/) partition)" | cut -d' ' -f1)
+    rootpartition=$(lsblk -Alpn -o NAME,SIZE,TYPE | grep "${diskname##*/}.*part" | \
+      gum filter --prompt.foreground 93 --prompt.bold --prompt "Root partition: " \
+        --placeholder "(select the root (/) partition)" | cut -d' ' -f1)
   done
 }
 
@@ -178,7 +178,7 @@ create_swapfile() {
   # make the swap and activate it
   arch-chroot /mnt mkswap /maidswap && arch-chroot /mnt swapon /maidswap
   # append the swapfile to the fstab file
-  arch-chroot /mnt echo "/maidswap none swap defaults 0 0" >> /etc/fstab
+  echo "/maidswap none swap defaults 0 0" >> /mnt/etc/fstab
   # print the filesystem table to stdout
   genfstab -U /mnt
 }
@@ -269,9 +269,10 @@ lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
 heading "Installing packages"
 
 # install the essential packages
-pacstrap -K /mnt linux linux-firmware linux-headers base ${vendor}-ucode \
-  grub efibootmgr doas dash zsh git curl ca-certificates reflector networkmanager \
-  neovim bluez bluez-utils cups
+gum spin --spinner line --show-output --title "Installing essential packages..." -- \
+  pacstrap -K /mnt linux linux-firmware linux-headers base ${vendor}-ucode \
+    grub efibootmgr doas dash zsh git curl ca-certificates reflector networkmanager \
+    neovim bluez bluez-utils cups
 
 ### CONFIGURE THE NEW SYSTEM ###
 
@@ -294,8 +295,8 @@ arch-chroot /mnt hwclock --systohc
 heading "Generating locale"
 
 # uncomment and generate the needed locales
-arch-chroot /mnt sed -i "s/#en_US.UTF-8/en_US.UTF-8/" /etc/locale.gen
-arch-chroot /mnt sed -i "s/#ja_JP.UTF-8/ja_JP.UTF-8/" /etc/locale.gen
+sed -i "s/#en_US.UTF-8/en_US.UTF-8/" /mnt/etc/locale.gen
+sed -i "s/#ja_JP.UTF-8/ja_JP.UTF-8/" /mnt/etc/locale.gen
 arch-chroot /mnt locale-gen
 
 # persist the selected keymap and locales
