@@ -13,22 +13,16 @@ install() {
   pacman --noconfirm --needed -S "$1" >/dev/null 2>&1
 }
 
+heading() {
+  gum style --bold --foreground 99 "$1"
+}
+
 welcome() {
   gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
     --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border double \
     --prompt.align center --affirmative "Continue" --negative "End" \
-    --default "Welcome to irisfield's Arch Linux RICE installer.
-This script installs a minimal Linux desktop using irisfield's dotfiles."
-}
-
-get_username() {
-  username=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Account name: " \
-    --placeholder "(enter a name for the user account)")
-  while ! echo "$username" | grep -q "^[a-z_][a-z0-9_-]*$"; do
-    username=$(gum input --prompt.foreground 99 --prompt.bold \
-      --prompt "Try again. Account name: " \
-      --placeholder "(only lowercase letters, - and _ are allowed)")
-  done
+    --default "Welcome to irisfield's Arch Linux guided installer.
+This script installs a minimal Arch Linux system."
 }
 
 get_password() {
@@ -159,7 +153,7 @@ input_confirmation() {
     --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border rounded \
     --default "$(gum format -t markdown "username|password|hostname|keymap|timezone
 -|-|-|-|-
-$username|$hidden|$hostname|$keymap|$timezone
+root|$hidden|$hostname|$keymap|$timezone
 
 disk|efi part|format|root part|swap
 -|-|-|-|-
@@ -177,98 +171,16 @@ final_prompt() {
 }
 
 create_swapfile() {
+  heading "Making swapfile"
   # create swapfile and change its permission
   arch-chroot /mnt fallocate -l "${1}GiB" /maidswap &&
     arch-chroot /mnt chmod 600 /maidswap
   # make the swap and activate it
   arch-chroot /mnt mkswap /maidswap && arch-chroot /mnt swapon /maidswap
   # append the swapfile to the fstab file
-  echo "/maidswap none swap defaults 0 0" >> /mnt/etc/fstab
+  arch-chroot /mnt echo "/maidswap none swap defaults 0 0" >> /etc/fstab
   # print the filesystem table to stdout
   genfstab -U /mnt
-}
-
-create_user_account() {
-  # create the user
-  if ! arch-chroot /mnt useradd -m -g wheel -s /usr/bin/zsh "$username"; then
-		arch-chroot /mnt usermod -a -G wheel "$username" &&
-      arch-chroot /mnt mkdir -p /home/"$username" &&
-        arch-chroot /mnt chown "$username":wheel /home/"$username"
-  fi
-  # set same password for the root user and the user
-  arch-chroot /mnt echo "root:$password" | chpasswd
-  arch-chroot /mnt echo "$username:$password" | chpasswd
-  # make zsh the default shell for the user
-  arch-chroot /mnt chsh -s /bin/zsh "$username" >/dev/null 2>&1
-  unset password verify
-}
-
-install_aur_helper() {
-  parudir="/home/$username/.cache/paru/clone"
-  mkdir -p "$parudir" && chown -R "$username":wheel "${parudir%/*/*}"
-  gum spin --spinner line --show-output --title "Installing paru, an AUR helper..." -- \
-    doas -u "$username" git -C "$parudir" clone -q "https://aur.archlinux.org/paru.git" &&
-    cd "${parudir}/paru" && doas -u "$username" makepkg --noconfirm -si
-}
-
-main_install() {
-  mpk=$(printf '\n%b %b' "\033[1m$1\033[21m" "$2")
-  gum spin --spinner line --title "($n/$total) Installing $1.$mpk" -- \
-    pacman --noconfirm --needed -S "$1"
-}
-
-paru_install() {
-  apk=$(printf '\n%b %b' "\033[1m$1\033[0m" "$2")
-  gum spin --spinner line --title "($n/$total) Installing $1 from the AUR.$apk" -- \
-    doas -u "$username" paru --noconfirm --needed -S "$1"
-}
-
-get_packages() {
-  if [ -f "./packages.csv" ]; then
-    trap 'rm -f /packages.csv' EXIT HUP INT QUIT TERM
-    # extract all the valid entries from the file
-    grep '^[RU],[^,]\+,[^,]\+$' packages.csv > /tmp/packages.csv
-    # remove any inline '#' comments
-    sed -i "s/\s*#[^\"']*$//" /tmp/packages.csv
-  else
-    printf '%b\n' "This directory does not have a \033[37mpackages.csv\033[0m file!"
-    return 1
-  fi
-}
-
-install_packages() {
-  if get_packages; then
-    total=$(wc -l < /tmp/packages.csv) && n=0
-    while IFS=, read -r repo package description; do
-      n=$((n + 1))
-      echo "$description" | grep -q "^\".*\"$" &&
-        description="$(echo "$description" | sed -E "s/(^\"|\"$)//g")"
-      case "$repo" in
-        "R") main_install "$package" "$description" && n=$((n + 1)) ;;
-        "U") paru_install "$package" "$description" && n=$((n + 1)) ;;
-      esac
-    done < /tmp/packages.csv
-  fi
-}
-
-if_user_exists() {
-  if id -u "$username" >/dev/null 2>&1; then
-    gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
-      --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border thick \
-      --prompt.align center --affirmative "Proceed" --negative "Exit" \
-      --default "$(gum style --bold --foreground 124 "WARNING")
-The user '$username' already exists on this system! \
-Would you like to proceed with the installation and overwrite conflicting \
-settings and dotfiles for this user?" &&
-    gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
-      --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border thick \
-      --prompt.align center --negative "Exit" \
-      --default "$(gum style --bold --foreground 124 "WARNING")
-Settings and dotfiles aside, no other file in the home directory will be affected. \
-Note that this will change the user's password to the new one.
-$(gum style --width 55 --align middle --bold --foreground 69 \
-  'Are you sure you would like to proceed?')"
-  fi
 }
 
 ### START OF THE SCRIPT ###
@@ -289,8 +201,6 @@ pacman --noconfirm --needed -Sy gum >/dev/null 2>&1 ||
 
 welcome || end "bye bye"
 
-get_username || end "exited"
-
 get_password || end "exited"
 
 get_hostname || end "exited"
@@ -303,17 +213,14 @@ disk_partition || end "exited"
 
 get_efi_partition || end "exited"
 
+# get_home_partition || end "exited"
+
 get_root_partition || end "exited"
 
 suggest_swapfile || end "exited"
 
-if_user_exists || end "exited"
-
 while input_confirmation; do
-  case "$(gum choose "username" "password" "host" \
-    "keymap" "timezone" "disk" "efi" "root" "swap")" in
-    username)
-      get_username ;;
+  case "$(gum choose "password" "host" "keymap" "timezone" "disk" "efi" "root" "swap")" in
     password)
       get_password ;;
     host)
@@ -335,46 +242,40 @@ done
 
 final_prompt || end "exited"
 
-# refresh archlinux keyring and install reflector
+heading "Updating archlinux-keyring"
+
+# refresh archlinux keyring and install reflector if missing
 pacman --needed --noconfirm -S archlinux-keyring reflector ||
   end "pacman failed, please make sure you have an internet connection"
 
-# heading
-gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
-  "Updating mirrors using reflector"
+heading "Updating mirrors using reflector"
 
 # update the mirror list using reflector to have the fastest servers
 reflector --protocol https --country US --age 6 --latest 45 --fastest 15 \
   --save /etc/pacman.d/mirrorlist >/dev/null 2>&1 && pacman -Sy ||
     printf '%s\n' "reflector failed, skipping..."
 
-
-# heading
-gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
-  "Filesystem table (fstab) file"
+heading "Formatting partitions"
 
 # format the partitions
-gum spin --spinner line --show-output --title "Formatting the partitions..." -- \
-  mkfs.ext4 "$rootpartition" && [ "$formatefi" = "yes" ] && mkfs.fat -F 32 "$efipartition"
+mkfs.ext4 "$rootpartition" && [ "$formatefi" = "yes" ] && mkfs.fat -F 32 "$efipartition"
 
 # mount the partitions
-gum spin --spinner line --title "Mounting the partitions..." -- \
 mount "$rootpartition" /mnt && mount --mkdir "$efipartition" /mnt/boot
 
 # detect cpu vendor
 lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
 
+heading "Installing packages"
+
 # install the essential packages
-gum spin --spinner line --title "Installing essential packages..." -- \
-  pacstrap -K /mnt linux linux-firmware linux-headers base ${vendor}-ucode \
+pacstrap -K /mnt linux linux-firmware linux-headers base ${vendor}-ucode \
   grub efibootmgr doas dash zsh git curl ca-certificates reflector networkmanager \
   neovim bluez bluez-utils cups
 
 ### CONFIGURE THE NEW SYSTEM ###
 
-# heading
-gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
-  "Filesystem table (fstab) file"
+heading "Generating filesystem table"
 
 # generate a filesystem table (fstab) file using UUID
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -390,8 +291,7 @@ arch-chroot /mnt ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
 # synchronize the system and hardware clock
 arch-chroot /mnt hwclock --systohc
 
-gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
-  "Locale"
+heading "Generating locale"
 
 # uncomment and generate the needed locales
 arch-chroot /mnt sed -i "s/#en_US.UTF-8/en_US.UTF-8/" /etc/locale.gen
@@ -399,13 +299,13 @@ arch-chroot /mnt sed -i "s/#ja_JP.UTF-8/ja_JP.UTF-8/" /etc/locale.gen
 arch-chroot /mnt locale-gen
 
 # persist the selected keymap and locales
-arch-chroot /mnt echo "KEYMAP=$keymap" > /etc/vconsole.conf
-arch-chroot /mnt echo "LANG=en_US.UTF-8" > /etc/locale.conf
+echo "KEYMAP=$keymap" > /mnt/etc/vconsole.conf
+echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
 
 ### NETWORK CONFIGURATION ###
 
 # create the hostname file
-arch-chroot /mnt echo "$hostname" > /etc/hostname
+echo "$hostname" > /mnt/etc/hostname
 
 # create the local hostname
 arch-chroot /mnt tee -a /etc/hosts >/dev/null << EOT
@@ -416,14 +316,11 @@ EOT
 
 ### CONFIGURATION ###
 
-gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
-  "Create user account for root and $username"
-
-# create the user
-create_user_account
+# set password for the root user
+arch-chroot /mnt echo "root:$password" | chpasswd && unset password verify
 
 # permit the wheel group to use doas with password
-arch-chroot /mnt echo "permit persist keepenv :wheel" > /etc/doas.conf
+echo "permit persist keepenv :wheel" > /mnt/etc/doas.conf
 
 # activate services
 arch-chroot /mnt systemctl enable NetworkManager
@@ -432,9 +329,8 @@ arch-chroot /mnt systemctl enable cups.service
 arch-chroot /mnt systemctl enable reflector.timer
 
 ### BOOT LOADER ###
-# heading
-gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
-  "GRUB boot loader"
+
+heading "GRUB"
 
 # install GRUB
 arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
@@ -447,4 +343,4 @@ arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
 # installation complete
 gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
   "Installation complete. If there were no error messages, please reboot and login \
-as root or as $username."
+as the root user."
