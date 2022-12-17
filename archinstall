@@ -342,6 +342,9 @@ arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
 
 ### FINALIZE ###
 
+# copy this directory to the root directory to have access to it after rebooting
+cp -f "$PWD" /mnt/root/
+
 # unmount the partitions
 umount /mnt/boot && umount /mnt
 
