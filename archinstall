@@ -196,6 +196,20 @@ create_swapfile() {
   genfstab -U /mnt
 }
 
+install_paru() {
+  repodir="/home/${username}/.cache/paru/clone"
+  arch-chroot /mnt sudo -u "$username" mkdir -p "/mnt/${repodir}/paru"
+  arch-chroot /mnt sudo -u "$username" git clone --single-branch --depth 1 --no-tags -q \
+    "https://aur.archlinux.org/paru-bin.git" "/mnt/${repodir}/paru" ||
+    {
+      cd "/mnt/$repodir/paru" || return 1
+      arch-chroot /mnt sudo -u "$username" git pull --force origin master
+    }
+  cd "/mnt/$repodir/paru" || exit 1
+  arch-chroot /mnt sudo -u "$username" -D "$repodir/paru" \
+    makepkg --noconfirm -si > /dev/null 2>&1 || return 1
+}
+
 ### START OF THE SCRIPT ###
 
 # just in case, make sure the distribution is Arch Linux
@@ -399,6 +413,12 @@ EOF
 # allow reflector to update the mirrorlist periodically (weekly by default)
 arch-chroot /mnt systemctl enable reflector.timer
 arch-chroot /mnt systemctl stop reflector.timer
+
+
+### PACKAGES ###
+
+# install AUR helper
+install_paru
 
 ### BOOT LOADER ###
 
