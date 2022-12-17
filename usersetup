@@ -14,32 +14,6 @@ welcome() {
 This script installs a minimal Linux desktop using irisfield's dotfiles."
 }
 
-
-get_username() {
-  username=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Account name: " \
-    --placeholder "(enter a name for the user account)")
-  while ! echo "$username" | grep -q "^[a-z_][a-z0-9_-]*$"; do
-    username=$(gum input --prompt.foreground 99 --prompt.bold \
-      --prompt "Try again. Account name: " \
-      --placeholder "(only lowercase letters, - and _ are allowed)")
-  done
-}
-
-get_password() {
-  password=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Password: " \
-    --password --placeholder "(enter a password for $username)")
-  verify=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Verify: " \
-    --password --placeholder "(retype the password)")
-  while ! [ "$password" = "$verify" ]; do
-    unset verify
-    password=$(gum input --prompt.foreground 99 --prompt.bold \
-      --prompt "Try again. Password: " --password \
-      --placeholder "(enter a password for the root user)")
-    verify=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Verify: " \
-      --password --placeholder "(retype the password)")
-  done
-}
-
 if_user_exists() {
   if id -u "$username" >/dev/null 2>&1; then
     gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
@@ -60,22 +34,13 @@ $(gum style --width 55 --align middle --bold --foreground 69 \
   fi
 }
 
-create_user() {
-  # create the user
-	useradd -m -g wheel -s /usr/bin/zsh "$username" || usermod -a -G wheel "$username" &&
-    mkdir -p /home/"$name" && chown "$name":wheel /home/"$name"
-  # set same password for the root user and the user
-  echo "$username:$password" | chpasswd && unset password verify
-  # make zsh the default shell for the user
-  # chsh -s /usr/bin/zsh "$username" >/dev/null 2>&1
-}
-
 install_aur_helper() {
   parudir="/home/$username/.cache/paru/clone"
-  mkdir -p "$parudir" && chown -R "$username":wheel "${parudir%/*/*}"
-  # gum spin --spinner line --show-output --title "Installing paru, an AUR helper..." -- \
-  doas -u "$username" git -C "$parudir" clone -q "https://aur.archlinux.org/paru.git" &&
-    cd "${parudir}/paru" && doas -u "$username" makepkg --noconfirm -si
+  sudo -u "$username" mkdir -p "${parudir}" &&
+  gum spin --spinner line --show-output --title "Installing paru, an AUR helper..." -- \
+    sudo -u "$username" git clone -q "https://aur.archlinux.org/paru-bin.git" \
+      "${parudir}/paru" && cd "${parudir}/paru" &&
+        sudo -u "$username" makepkg --noconfirm -si
 }
 
 main_install() {
@@ -164,42 +129,6 @@ chown -c root:root /etc/doas.conf && chmod -c 0400 /etc/doas.conf
 # check for syntax errors as it is imperative that /etc/doas.conf is error free
 doas doas -C /etc/doas.conf >&2 || end "please fix the syntax error before proceeding"
 
-# set up the reflector service
-tee /etc/xdg/reflector/reflector.conf >/dev/null << EOF
-# reflector configuration file for the systemd service
-# reflector --protocol https --country US --latest 45 --fastest 15 --save /etc/pacman.d/mirrorlist
-
-# get the most recent mirrors with the highest download speed over https in the US
---protocol https
---country US
---latest 45
---fastest 15
-
-# save the results to the following file
---save /etc/pacman.d/mirrorlist
-EOF
-
-# enable the reflector timer to run reflector periodically (weekly by default)
-systemctl enable reflector.timer
-
-# source zsh startup files from a different location at startup
-tee -a /etc/zsh/zshenv >/dev/null << EOF
-for z in zshenv zprofile zshrc; do
-  # source in the same order as indicated in zsh(1)
-  [ -f "\$HOME/.config/zsh/\$z" ] && source "\$HOME/.config/zsh/\$z"
-done && unset z
-EOF
-
-# enable the multilib repository
-sed -i '/^#.multilib]$/s/^#//;/^.multilib]$/{n;s/^#//}' /etc/pacman.conf
-
-# configure pacman misc options
-sed -i '/^#Color/s/^#//;/^#ILoveCandy/s/^#//;/^#ParallelDownloads/s/^#//' /etc/pacman.conf
-
-# shellcheck disable=2016
-# use all cores when compiling packages with makepkg
-sed -i '/^#MAKEFLAGS/s/^#//;s/-j2/-j$(nproc)/' /etc/makepkg.conf
-
-# beep begone!
-rmmod pcspkr
-echo "blacklist pcspkr" >/etc/modprobe.d/nobeep.conf
+# temporarily allow AUR to install built packages without password
+trap 'rm -f /mnt/etc/sudoers.d/aur-install-temp' HUP INT QUIT TERM PWR EXIT
+echo "%wheel ALL=(ALL) NOPASSWD: ALL" >/mnt/etc/sudoers.d/aur-install-temp
