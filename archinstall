@@ -197,32 +197,31 @@ create_swapfile() {
 }
 
 install_paru() {
-  trap 'rm -rf /mnt/tmp/paru' HUP INT QUIT TERM PWR EXIT
-  # create temp directory to download paru
-  mkdir -p "/mnt/tmp/paru"
-  # clone the paru-bin package from the AUR
-  git clone --single-branch --depth 1 --no-tags -q \
-    "https://aur.archlinux.org/paru-bin.git" "/mnt/tmp/paru"
+  parudir="/mnt/home/${username}/paru"
+  # trap "rm -rf $parudir" HUP INT QUIT TERM PWR EXIT
+  # clone the paru-bin package from the AUR to the temporary directory
+  mkdir -p "$parudir" && git clone --single-branch --depth 1 --no-tags -q \
+    "https://aur.archlinux.org/paru-bin.git" "$parudir"
   # extract the version number of the most recent version
-  pkgver="$(awk -F"[=]" '/pkgver=/{print $2}' /mnt/tmp/paru/PKGBUILD)"
+  pkgver="$(awk -F"[=]" '/pkgver=/{print $2}' ${parudir}/PKGBUILD)"
   pkgname="paru-v${pkgver}-x86_64.tar.zst"
   url="https://github.com/Morganamilo/paru/releases/download/v${pkgver}/${pkgname}"
   # download the package from github
-  curl -L -o "/mnt/tmp/paru/${pkgname}" "$url"
+  curl -L -o "${parudir}/${pkgname}" "$url"
   # install it using pacman
-  cd "/mnt/tmp/paru"
-  install -Dm755 paru "/mnt/usr/bin/paru"
-  install -Dm644 paru.conf "/mnt/etc/paru.conf"
-  install -Dm644 man/paru.8 "/mnt/usr/share/man/man8/paru.8"
-  install -Dm644 man/paru.conf.5 "/mnt/usr/share/man/man5/paru.conf.5"
-  install -Dm644 completions/bash "/mnt/usr/share/bash-completion/completions/paru.bash"
-  install -Dm644 completions/zsh "/mnt/usr/share/zsh/site-functions/_paru"
-  cp -r locale "/mnt/usr/share/"
+  tar -xvf "${parudir}/${pkgname}" -C "$parudir" && chmod +x "${parudir}/paru"
+  # install -Dm755 paru "/mnt/usr/bin/paru"
+  # install -Dm644 paru.conf "/mnt/etc/paru.conf"
+  # install -Dm644 man/paru.8 "/mnt/usr/share/man/man8/paru.8"
+  # install -Dm644 man/paru.conf.5 "/mnt/usr/share/man/man5/paru.conf.5"
+  # install -Dm644 completions/bash "/mnt/usr/share/bash-completion/completions/paru.bash"
+  # install -Dm644 completions/zsh "/mnt/usr/share/zsh/site-functions/_paru"
+  # cp -r locale "/mnt/usr/share/"
 
   # temporarily allow user to install packages without password
   trap 'rm -f /mnt/etc/sudoers.d/paru-temp' HUP INT QUIT TERM PWR EXIT
   echo "%${username} ALL=(ALL) NOPASSWD: ALL" >/mnt/etc/sudoers.d/paru-temp
-  arch-chroot /mnt sudo -u "$username" paru --noconfirm -Sy paru-bin
+  arch-chroot /mnt sudo -u "$username" "/${parudir#/*/}"/paru --noconfirm -Sy paru-bin
 }
 
 ### START OF THE SCRIPT ###
