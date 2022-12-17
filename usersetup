@@ -128,7 +128,3 @@ chown -c root:root /etc/doas.conf && chmod -c 0400 /etc/doas.conf
 
 # check for syntax errors as it is imperative that /etc/doas.conf is error free
 doas doas -C /etc/doas.conf >&2 || end "please fix the syntax error before proceeding"
-
-# temporarily allow AUR to install built packages without password
-trap 'rm -f /mnt/etc/sudoers.d/aur-install-temp' HUP INT QUIT TERM PWR EXIT
-echo "%wheel ALL=(ALL) NOPASSWD: ALL" >/mnt/etc/sudoers.d/aur-install-temp

@@ -197,14 +197,12 @@ create_swapfile() {
 }
 
 install_paru() {
-  trap 'rm -rf /mnt/tmp/paru' HUP INT QUIT TERM PWR EXIT
-  # install packages needed
-  arch-chroot /mnt sudo -u "$username" pacman --noconfirm -S curl ca-certificates
+  # trap 'rm -rf /mnt/tmp/paru' HUP INT QUIT TERM PWR EXIT
   # create temp directory to download paru
-  arch-chroot /mnt sudo -u "$username" mkdir -p "/tmp/paru"
+  arch-chroot /mnt sudo -u "$username" mkdir -p "/tmp/paru" || end "failed at mkdir"
   # clone the paru-bin package from the AUR
   arch-chroot /mnt sudo -u "$username" git clone --single-branch --depth 1 --no-tags -q \
-    "https://aur.archlinux.org/paru-bin.git" "/tmp/paru"
+    "https://aur.archlinux.org/paru-bin.git" "/tmp/paru" || end "failed at git clone"
   # extract the version number of the most recent version
   pkgver="$(awk -F"[=]" '/pkgver=/{print $2}' /mnt/tmp/paru/PKGBUILD)"
   pkgname="paru-v${pkgver}-x86_64.tar.zst"
@@ -212,7 +210,7 @@ install_paru() {
   # download the package from github
   arch-chroot /mnt sudo -u "$username" curl -L -o "/tmp/paru/${pkgname}" "$url"
   # install it using pacman
-  arch-chroot /mnt sudo -u "$username" pacman -U "/tmp/paru/${pkgname}"
+  arch-chroot /mnt sudo -u "$username" pacman -U "/tmp/paru/${pkgname}" || end "failed at pacman"
 }
 
 ### START OF THE SCRIPT ###
@@ -309,8 +307,8 @@ header "Installing packages"
 # install the essential packages
 gum spin --spinner line --title "Installing core packages..." -- \
   pacstrap -K /mnt linux linux-firmware linux-headers base base-devel ${vendor}-ucode \
-    grub efibootmgr git zsh gum doas dash reflector networkmanager neovim terminus-font ||
-      end "core packages failed, please make sure you have an internet connection"
+    grub efibootmgr dash reflector networkmanager neovim terminus-font ca-certificates \
+    git curl gum doas || end "packages failed, make sure you have an internet connection"
 
 # to allow connecting to the internet on reboot
 arch-chroot /mnt systemctl enable NetworkManager
@@ -370,13 +368,26 @@ echo "$username:$password" | arch-chroot /mnt chpasswd ||
 # set password for the root user
 echo "root:$password" | arch-chroot /mnt chpasswd && unset password verify
 
+### INSTALL AUR HELPER HERE ###
+
+header "Installing AUR helper"
+
+# temporarily allow user to install packages without password
+trap 'rm -f /mnt/etc/sudoers.d/paru-temp' HUP INT QUIT TERM PWR EXIT
+echo "%${username} ALL=(ALL) NOPASSWD: ALL" >/mnt/etc/sudoers.d/paru-temp
+
+# install AUR helper
+install_paru || end "something went wrong at install_paru"
+
+################
+
 # permit user to sudo with password
 echo "%${username} ALL=(ALL:ALL) ALL" > /mnt/etc/sudoers.d/00-"${username}"
 
 # allow some system commands to run without password
 echo "%${username} ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/usr/bin/mount,\
-  /usr/bin/umount,/usr/bin/pacman -S,/usr/bin/pacman -Sy,/usr/bin/pacman -Syu" \
-  > /mnt/etc/sudoers.d/01-no-password-commands
+  /usr/bin/umount,/usr/bin/pacman --noconfirm -S,/usr/bin/pacman -S,/usr/bin/pacman -Sy,\
+  /usr/bin/pacman -Syu" > /mnt/etc/sudoers.d/01-no-password-commands
 
 # set the default editor for visudo
 echo "Defaults editor=/usr/bin/nvim" > /mnt/etc/sudoers.d/02-visudo-editor
@@ -419,12 +430,6 @@ EOF
 # allow reflector to update the mirrorlist periodically (weekly by default)
 arch-chroot /mnt systemctl enable reflector.timer
 arch-chroot /mnt systemctl stop reflector.timer
-
-
-### PACKAGES ###
-
-# install AUR helper
-install_paru || end "something went wrong at install_paru"
 
 ### BOOT LOADER ###
 
