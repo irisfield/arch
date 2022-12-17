@@ -8,10 +8,6 @@ end() {
   printf '%s\n' "$1" >&2 && exit 1 # log to stderr and exit with failure
 }
 
-warn() {
-  gum style --foreground 161 "$1"
-}
-
 install() {
   pacman --noconfirm --needed -S "$1" >/dev/null 2>&1
 }
@@ -197,31 +193,55 @@ create_swapfile() {
 }
 
 install_paru() {
+  # temporary directory to use for paru
   parudir="/mnt/home/${username}/paru"
-  # trap "rm -rf $parudir" HUP INT QUIT TERM PWR EXIT
   # clone the paru-bin package from the AUR to the temporary directory
   mkdir -p "$parudir" && git clone --single-branch --depth 1 --no-tags -q \
-    "https://aur.archlinux.org/paru-bin.git" "$parudir"
+    "https://aur.archlinux.org/paru-bin.git" "$parudir" || end "failed to clone paru"
   # extract the version number of the most recent version
   pkgver="$(awk -F"[=]" '/pkgver=/{print $2}' ${parudir}/PKGBUILD)"
   pkgname="paru-v${pkgver}-x86_64.tar.zst"
   url="https://github.com/Morganamilo/paru/releases/download/v${pkgver}/${pkgname}"
   # download the package from github
   curl -L -o "${parudir}/${pkgname}" "$url"
-  # install it using pacman
-  tar -xvf "${parudir}/${pkgname}" -C "$parudir" && chmod +x "${parudir}/paru"
-  # install -Dm755 paru "/mnt/usr/bin/paru"
-  # install -Dm644 paru.conf "/mnt/etc/paru.conf"
-  # install -Dm644 man/paru.8 "/mnt/usr/share/man/man8/paru.8"
-  # install -Dm644 man/paru.conf.5 "/mnt/usr/share/man/man5/paru.conf.5"
-  # install -Dm644 completions/bash "/mnt/usr/share/bash-completion/completions/paru.bash"
-  # install -Dm644 completions/zsh "/mnt/usr/share/zsh/site-functions/_paru"
-  # cp -r locale "/mnt/usr/share/"
+  # extract the tar file to the temporary directory
+  tar -xvf "${parudir}/${pkgname}" -C "$parudir" > /dev/null 2>&1 &&
+    chmod +x "${parudir}/paru"
+  # use paru to install paru so that it can be managed by pacman
+  arch-chroot /mnt sudo -u "$username" \
+    "/${parudir#/*/}"/paru --noconfirm -Sy paru-bin > /dev/null 2>&1 &&
+      echo "installed paru"
+  # clean up
+  rm -rf "$parudir"
+}
 
-  # temporarily allow user to install packages without password
-  trap 'rm -f /mnt/etc/sudoers.d/paru-temp' HUP INT QUIT TERM PWR EXIT
-  echo "%${username} ALL=(ALL) NOPASSWD: ALL" >/mnt/etc/sudoers.d/paru-temp
-  arch-chroot /mnt sudo -u "$username" "/${parudir#/*/}"/paru --noconfirm -Sy paru-bin
+install_packages() {
+  if [ -f "./packages.csv" ]; then
+    # extract all the valid entries from the file
+    grep '^[RU],[^,]\+,".*"$' packages.csv > /mnt/tmp/packages.csv
+    # remove any inline '#' comments
+    sed -i "s/\s*#[^\"']*$//" /mnt/tmp/packages.csv
+  else
+    printf '%b\n' "This directory does not have a \033[37mpackages.csv\033[0m file!"
+    return 1
+  fi
+  # total number of packages
+  total=$(wc -l < /tmp/packages.csv) && n=0
+  # installation loop
+  while IFS=, read -r repo pkg desc; do
+    echo "$desc" | grep -q "^\".*\"$" && desc="$(echo "$desc" | sed -E "s/(^\"|\"$)//g")"
+    n=$((n + 1)) && msg=$(printf '%b\n' "\033[35m${pkg}\033[10m ${desc} (${n}/${total}")
+    case "$repo" in
+      "R")
+        gum spin --spinner line --title "$msg" -- arch-chroot /mnt sudo -u "$username" \
+          pacman --noconfirm --needed -S "$pkg" > /dev/null 2&>1
+      ;;
+      "U")
+        gum spin --spinner line --title "$msg" -- arch-chroot /mnt sudo -u "$username" \
+          paru --noconfirm --needed -S "$pkg" > /dev/null 2&>1
+      ;;
+    esac
+  done < /mnt/tmp/packages.csv && rm -f /mnt/tmp/packages.csv
 }
 
 ### START OF THE SCRIPT ###
@@ -234,7 +254,7 @@ install_paru() {
   end "please boot the system in UEFI mode and try again"
 
 # check for the root user
-[ "$(id -u)" -eq 0 ] || end "please run this script from archiso"
+[ "$(id -u)" -eq 0 ] || end "please run this script from the archiso"
 
 # test for an internet connection and install gum
 pacman --noconfirm --needed -Sy gum >/dev/null 2>&1 ||
@@ -288,6 +308,8 @@ done
 
 final_prompt || end "exited"
 
+### START INSTALL ###
+
 header "Updating archlinux-keyring"
 
 # refresh archlinux keyring and install reflector if missing
@@ -301,6 +323,8 @@ reflector --protocol https --country US --age 12 --latest 45 --fastest 15 \
   --save /etc/pacman.d/mirrorlist >/dev/null 2>&1 && pacman -Sy ||
     printf '%s\n' "reflector failed, skipping..."
 
+### DISK FORMATTING ###
+
 header "Formatting partitions"
 
 # format the partitions
@@ -309,6 +333,8 @@ mkfs.ext4 "$rootpartition" && [ "$formatefi" = "yes" ] &&
 
 # mount the partitions
 mount "$rootpartition" /mnt && mount --mkdir "$efipartition" /mnt/boot
+
+### CORE PACKAGES ###
 
 # detect cpu vendor
 lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
@@ -344,6 +370,8 @@ arch-chroot /mnt ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
 # synchronize the system and hardware clock
 arch-chroot /mnt hwclock --systohc
 
+### LOCALE AND KEYMAP ###
+
 header "Generating locale"
 
 # uncomment and generate the needed locales
@@ -367,26 +395,46 @@ arch-chroot /mnt tee -a /etc/hosts >/dev/null << EOT
 127.0.1.1    ${hostname}.localdomain $hostname
 EOT
 
-### USER CONFIGURATION ###
+### USER ###
 
-arch-chroot /mnt useradd -m -s /usr/bin/zsh "$username" ||
-  warn "the user $username already exists"
+header "Creating users"
+
+arch-chroot /mnt useradd -m -s /usr/bin/zsh "$username" && echo "created $username"
 
 # set password for the new user
 echo "$username:$password" | arch-chroot /mnt chpasswd ||
-  warn "error setting the password for $username"
+  gum style --foreground 161 "error setting the password for $username"
 
 # set password for the root user
 echo "root:$password" | arch-chroot /mnt chpasswd && unset password verify
 
-### INSTALL AUR HELPER HERE ###
+### PACMAN AND MAKEPKG ###
+
+# enable the multilib repository
+sed -i '/^#.multilib]$/s/^#//;/^.multilib]$/{n;s/^#//}' /mnt/etc/pacman.conf
+
+# configure pacman misc options
+sed -i '/^#Color/s/^#//;/^#ILoveCandy/s/^#//;/^#ParallelDownloads/s/^#//' /mnt/etc/pacman.conf
+
+# use all cores when compiling packages with makepkg
+sed -i "/^#MAKEFLAGS/s/^#//;s/-j2/-j$(nproc)/" /mnt/etc/makepkg.conf
+
+### PACKAGES ###
 
 header "Installing AUR helper"
+
+# temporarily allow user to install packages without password
+echo "%${username} ALL=(ALL) NOPASSWD: ALL" > /mnt/etc/sudoers.d/install-packages
 
 # install AUR helper
 install_paru || end "something went wrong at install_paru"
 
-################
+install_packages || end "something went wrong at install_packages"
+
+# clean up
+rm -f /mnt/etc/sudoers.d/install-packages
+
+### USER CONFIGURATION ###
 
 # permit user to sudo with password
 echo "%${username} ALL=(ALL:ALL) ALL" > /mnt/etc/sudoers.d/00-"${username}"
@@ -401,15 +449,6 @@ echo "Defaults editor=/usr/bin/nvim" > /mnt/etc/sudoers.d/02-visudo-editor
 
 # permit the wheel group to use doas with password
 echo "permit persist keepenv :${username}" > /mnt/etc/doas.conf
-
-# enable the multilib repository
-sed -i '/^#.multilib]$/s/^#//;/^.multilib]$/{n;s/^#//}' /mnt/etc/pacman.conf
-
-# configure pacman misc options
-sed -i '/^#Color/s/^#//;/^#ILoveCandy/s/^#//;/^#ParallelDownloads/s/^#//' /mnt/etc/pacman.conf
-
-# use all cores when compiling packages with makepkg
-sed -i "/^#MAKEFLAGS/s/^#//;s/-j2/-j$(nproc)/" /mnt/etc/makepkg.conf
 
 # beep begone!
 rmmod pcspkr && echo "blacklist pcspkr" > /mnt/etc/modprobe.d/nobeep.conf
