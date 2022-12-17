@@ -43,7 +43,7 @@ get_password() {
     --password --placeholder "(enter a password for $username)")
   verify=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Verify: " \
     --password --placeholder "(retype the password)")
-  while ! [ "$password" = "$verify" ]; do
+  while [ -z "$password" ] || [ "$password" != "$verify" ]; do
     unset verify
     password=$(gum input --prompt.foreground 99 --prompt.bold \
       --prompt "Try again. Password: " --password \
@@ -214,6 +214,8 @@ pacman --noconfirm --needed -Sy gum >/dev/null 2>&1 ||
 
 welcome || end "bye bye"
 
+get_username
+
 get_password
 
 get_hostname
@@ -233,7 +235,10 @@ get_root_partition || end "something went wrong at get_root_partition"
 suggest_swapfile || end "something went wrong at suggest_swapfile"
 
 while input_confirmation; do
-  case "$(gum choose "password" "host" "keymap" "timezone" "disk" "efi" "root" "swap")" in
+  case "$(gum choose "username" "password" "host" \
+    "keymap" "timezone" "disk" "efi" "root" "swap")" in
+    username)
+      get_username ;;
     password)
       get_password ;;
     host)
@@ -283,7 +288,7 @@ lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
 header "Installing packages"
 
 # install the essential packages
-gum spin --spinner line --title "Installing essential packages..." -- \
+gum spin --spinner line --title "Installing core packages..." -- \
   pacstrap -K /mnt linux linux-firmware linux-headers base base-devel ${vendor}-ucode \
     grub efibootmgr doas dash zsh gum reflector networkmanager neovim terminus-font
 
@@ -335,7 +340,7 @@ EOT
 
 ### USER CONFIGURATION ###
 
-arch-chroot /mnt useradd -m -g wheel -s /usr/bin/zsh "$username" ||
+arch-chroot /mnt useradd -m -s /usr/bin/zsh "$username" ||
   warn "the user $username already exists"
 
 # set password for the new user
@@ -345,11 +350,11 @@ echo "$username:$password" | arch-chroot /mnt chpasswd ||
 # set password for the root user
 echo "root:$password" | arch-chroot /mnt chpasswd && unset password verify
 
-# permit wheel users to sudo with password
-echo "%wheel ALL=(ALL:ALL) ALL" > /mnt/etc/sudoers.d/00-wheel-can-sudo
+# permit user to sudo with password
+echo "%${username} ALL=(ALL:ALL) ALL" > /mnt/etc/sudoers.d/00-"${username}"
 
 # allow some system commands to run without password
-echo "%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/usr/bin/mount,\
+echo "%${username} ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/usr/bin/mount,\
   /usr/bin/umount,/usr/bin/pacman -S,/usr/bin/pacman -Sy,/usr/bin/pacman -Syu" \
   > /mnt/etc/sudoers.d/01-no-password-commands
 
@@ -357,7 +362,7 @@ echo "%wheel ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/usr/bin/
 echo "Defaults editor=/usr/bin/nvim" > /mnt/etc/sudoers.d/02-visudo-editor
 
 # permit the wheel group to use doas with password
-echo "permit persist keepenv :wheel" > /mnt/etc/doas.conf
+echo "permit persist keepenv :${username}" > /mnt/etc/doas.conf
 
 # enable the multilib repository
 sed -i '/^#.multilib]$/s/^#//;/^.multilib]$/{n;s/^#//}' /mnt/etc/pacman.conf
@@ -414,6 +419,3 @@ umount /mnt/boot && umount /mnt
 gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
   "Installation complete. If there were no error messages, please reboot and login \
 as $username."
-
-# done
-finalize
