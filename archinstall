@@ -183,7 +183,7 @@ create_swapfile() {
   # header
   gum style --bold --foreground 99 "Making swapfile"
   # create swapfile and change its permission
-  fallocate -l "${1}GiB" /maidswap && chmod 600 /maidswap
+  fallocate -l "${1}GiB" /mnt/maidswap && chmod 600 /mnt/maidswap
   # make the swap and activate it
   arch-chroot /mnt mkswap /maidswap && arch-chroot /mnt swapon /maidswap
   # append the swapfile to the fstab file
@@ -293,20 +293,15 @@ lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
 # header
 gum style --bold --foreground 99 "Installing core packages"
 
-# core packages
-set -- linux linux-firmware linux-headers base base-devel ${vendor}-ucode
-set -- "$@" grub efibootmgr zsh dash git gum reflector networkmanager
-set -- "$@" neovim terminus-font curl ca-certificates
+# install the core packages in a single pacstrap call (required to generate initramfs)
+gum spin --spinner line --title "Installing core packages..." -- pacstrap -K /mnt \
+  linux linux-firmware linux-headers base base-devel ${vendor}-ucode grub efibootmgr zsh \
+  dash git gum reflector networkmanager neovim terminus-font curl ca-certificates &&
+    end "core packages failed, please make sure you have an internet connection"
 
-n=0 && for pkg in "$@"; do
-  # install the core packages
-  n=$((n + 1)) && gum spin --spinner line --title "Installating $pkg (${n} / ${#@})" -- \
-    pacstrap -K /mnt "$pkg" || printf '%b\n' "\033[31m${pkg}\033[0m failed"
-done && shift "${#@}" && unset n msg vendor
+echo "installed all the core packages."
 
-# pacstrap -K /mnt "$@" && echo "installed all the core packages"
-
-# to allow connecting to the internet on reboot
+# needed to connect to the internet on reboot
 arch-chroot /mnt systemctl enable NetworkManager
 arch-chroot /mnt systemctl stop NetworkManager
 
@@ -322,7 +317,7 @@ genfstab -U /mnt >> /mnt/etc/fstab
 genfstab -U /mnt
 
 # create swapfile if recommended
-[ "$ramsize" -gt 0 ] && create_swapfile "$ramsize"
+[ "$ramsize" -eq 0 ] && create_swapfile "$ramsize"
 
 # set the time zone
 arch-chroot /mnt ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
