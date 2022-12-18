@@ -162,11 +162,11 @@ input_confirmation() {
     --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border rounded \
     --default "$(gum format -t markdown "username|password|hostname|keymap|timezone
 -|-|-|-|-
-root|$hidden|$hostname|$keymap|$timezone
+${username}|${hidden}|${hostname}|${keymap}|${timezone}
 
 disk|efi part|format|root part|swap
 -|-|-|-|-
-$diskname|$efipartition|$formatefi|$rootpartition|$ramsize GB
+${diskname}|${efipartition}|${formatefi}|${rootpartition}|${ramsize} GB
 
 $(gum style --align center --bold --width 60 --foreground 69 \
   'Would you like to make changes?')")"
@@ -202,14 +202,14 @@ install_paru() {
   pkgname="paru-v${pkgver}-x86_64.tar.zst"
   url="https://github.com/Morganamilo/paru/releases/download/v${pkgver}/${pkgname}"
   # download the package from github
-  curl -L -o "${parudir}/${pkgname}" "$url"
+  curl -L -o "${parudir}/${pkgname}" "$url" > /dev/null 2>&1
   # extract the tar file to the temporary directory
   tar -xvf "${parudir}/${pkgname}" -C "$parudir" > /dev/null 2>&1 &&
     chmod +x "${parudir}/paru"
   # use paru to install paru so that it can be managed by pacman
   arch-chroot /mnt sudo -u "$username" \
     "/${parudir#/*/}"/paru --noconfirm -Sy paru-bin > /dev/null 2>&1 &&
-      echo "installed paru"
+      echo "installed paru, an AUR helper"
   # clean up
   rm -rf "$parudir" && unset parudir
 }
@@ -225,19 +225,21 @@ install_packages() {
     return 1
   fi
   # total number of packages
-  total=$(wc -l < /mnt/tmp/packages.csv) && n=0
+  printf '%s\n' "Total packages: $(wc -l < /mnt/tmp/packages.csv)" && n=0
   # installation loop
   while IFS=, read -r repo pkg desc; do
     echo "$desc" | grep -q "^\".*\"$" && desc="$(echo "$desc" | sed -E "s/(^\"|\"$)//g")"
-    n=$((n + 1)) && msg=$(printf '%b\n' "\033[35m${pkg}\033[10m ${desc} (${n}/${total}")
+    n=$((n + 1)) && msg=$(printf '%b\n' "${n}. \033[35m${pkg}\033[0m ${desc}")
     case "$repo" in
       "R")
-        gum spin --spinner line --title "$msg" -- arch-chroot /mnt sudo -u "$username" \
-          pacman --noconfirm --needed -S "$pkg" > /dev/null 2&>1
+        gum spin --spinner line --title "$msg" -- \
+          arch-chroot /mnt pacman --noconfirm --needed -S "$pkg" > /dev/null 2&>1 ||
+            printf '%b\n' "\033[31m${pkg}\033[0m from \033[32m${repo}\033[0m failed"
       ;;
       "U")
-        gum spin --spinner line --title "$msg" -- arch-chroot /mnt sudo -u "$username" \
-          paru --noconfirm --needed -S "$pkg" > /dev/null 2&>1
+        gum spin --spinner line --title "$msg" -- \
+          arch-chroot /mnt paru --noconfirm --needed -S "$pkg" > /dev/null 2&>1 ||
+            printf '%b\n' "\033[31m${pkg}\033[0m from \033[32m${repo}\033[0m failed"
       ;;
     esac
   done < /mnt/tmp/packages.csv && rm -f /mnt/tmp/packages.csv
@@ -340,11 +342,19 @@ lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
 
 header "Installing core packages"
 
-# install the core packages
-gum spin --spinner line --title "Installing core packages..." -- pacstrap -K /mnt \
-  linux linux-firmware linux-headers base base-devel ${vendor}-ucode grub efibootmgr zsh \
-  dash git gum reflector networkmanager neovim terminus-font curl ca-certificates ||
-    end "core packages failed, please make sure you have an internet connection"
+# core packages
+set -- linux linux-firmware linux-headers base base-devel ${vendor}-ucode
+set -- "$@" grub efibootmgr zsh dash git gum reflector networkmanager
+set -- "$@" neovim terminus-font curl ca-certificates
+
+for package in "$@"; do
+  # install the core packages
+  gum spin --spinner line --title "Installing $package" (${#package} / ${#@}) -- \
+    pacstrap -K /mnt "$package" || printf '%b\n' "\033[31m${package}\033[0m failed"
+  shift
+done && unset msg vendor
+
+echo "Installed all the core packages."
 
 # to allow connecting to the internet on reboot
 arch-chroot /mnt systemctl enable NetworkManager
@@ -398,14 +408,17 @@ EOT
 
 header "Creating users"
 
-arch-chroot /mnt useradd -m -s /usr/bin/zsh "$username" && echo "created $username"
+arch-chroot /mnt useradd -m -s /usr/bin/zsh "$username" &&
+  echo "Created user ${username}."
+  printf '%b\n' "created user \033[32m${username}\033[10m"
 
 # set password for the new user
 echo "$username:$password" | arch-chroot /mnt chpasswd ||
-  gum style --foreground 161 "error setting the password for $username"
+  gum style --foreground 161 "Error setting the password for ${username}."
 
 # set password for the root user
 echo "root:$password" | arch-chroot /mnt chpasswd && unset password verify
+printf '%b\n' "created user \033[32mroot\033[10m"
 
 ### PACMAN AND MAKEPKG ###
 
@@ -420,7 +433,7 @@ sed -i "/^#MAKEFLAGS/s/^#//;s/-j2/-j$(nproc)/" /mnt/etc/makepkg.conf
 
 ### PACKAGES ###
 
-header "Installing AUR helper"
+header "Installing user packages"
 
 # temporarily allow user to install packages without password
 echo "%${username} ALL=(ALL) NOPASSWD: ALL" > /mnt/etc/sudoers.d/install-packages
