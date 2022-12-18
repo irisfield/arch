@@ -154,7 +154,7 @@ Would you like to create $((ramsize * 2))GB of swap file?" &&
 
 input_confirmation() {
   hidden=$(for _ in $(seq 1 ${#password}); do printf '%s' "*"; done)
-  [ -n "$ramsize" ] && swapsize="$ramsize GB" || swapsize="NA"
+  [ -n "$ramsize" ] && swapsize="$ramsize GB" || swapsize="no"
   gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.align left \
     --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border rounded \
     --default "$(gum format -t markdown "username|password|hostname|keymap|timezone
