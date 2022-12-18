@@ -343,16 +343,15 @@ lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
 header "Installing core packages"
 
 # core packages
-shift "${#@}"
 set -- linux linux-firmware linux-headers base base-devel ${vendor}-ucode
 set -- "$@" grub efibootmgr zsh dash git gum reflector networkmanager
 set -- "$@" neovim terminus-font curl ca-certificates
 
-for package in "$@"; do
+n=0 && for pkg in "$@"; do
   # install the core packages
-  gum spin --spinner line --title "Installating $package (${#package} / ${#@})" -- \
-    pacstrap -K /mnt "$package" || printf '%b\n' "\033[31m${package}\033[0m failed"
-done && shift "${#@}" && unset msg vendor
+  n=$((n + 1)) && gum spin --spinner line --title "Installating $pkg (${n} / ${#@})" -- \
+    pacstrap -K /mnt "$pkg" || printf '%b\n' "\033[31m${pkg}\033[0m failed"
+done && shift "${#@}" && unset n msg vendor
 
 echo "Installed all the core packages."
 
@@ -409,16 +408,15 @@ EOT
 header "Creating users"
 
 arch-chroot /mnt useradd -m -s /usr/bin/zsh "$username" &&
-  echo "Created user ${username}."
-  printf '%b\n' "created user \033[32m${username}\033[10m"
+  printf '%b\n' "created user \033[32m${username}\033[0m"
 
 # set password for the new user
 echo "$username:$password" | arch-chroot /mnt chpasswd ||
-  gum style --foreground 161 "Error setting the password for ${username}."
+  gum style --foreground 161 "error setting the password for ${username}."
 
 # set password for the root user
 echo "root:$password" | arch-chroot /mnt chpasswd && unset password verify
-printf '%b\n' "created user \033[32mroot\033[10m"
+printf '%b\n' "created user \033[32mroot\033[0m"
 
 ### PACMAN AND MAKEPKG ###
 
