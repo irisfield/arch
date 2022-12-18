@@ -34,6 +34,61 @@ $(gum style --width 55 --align middle --bold --foreground 69 \
   fi
 }
 
+install_paru() {
+  # temporary directory to use for paru
+  parudir="/mnt/home/${username}/paru"
+  # clone the paru-bin package from the AUR to the temporary directory
+  mkdir -p "$parudir" && git clone --single-branch --depth 1 --no-tags -q \
+    "https://aur.archlinux.org/paru-bin.git" "$parudir" || end "failed to clone paru"
+  # extract the version number of the most recent version
+  pkgver="$(awk -F"[=]" '/pkgver=/{print $2}' ${parudir}/PKGBUILD)"
+  pkgname="paru-v${pkgver}-x86_64.tar.zst"
+  url="https://github.com/Morganamilo/paru/releases/download/v${pkgver}/${pkgname}"
+  # download the package from github
+  curl -L -o "${parudir}/${pkgname}" "$url" > /dev/null 2>&1
+  # extract the tar file to the temporary directory
+  tar -xvf "${parudir}/${pkgname}" -C "$parudir" > /dev/null 2>&1 &&
+    chmod +x "${parudir}/paru"
+  # use paru to install paru so that it can be managed by pacman
+  arch-chroot /mnt sudo -u "$username" \
+    "/${parudir#/*/}"/paru --noconfirm -Sy paru-bin > /dev/null 2>&1 &&
+      echo "installed paru, an AUR helper"
+  # clean up
+  rm -rf "$parudir" && unset parudir
+}
+
+install_packages() {
+  if [ -f "./packages.csv" ]; then
+    # extract all the valid entries from the file
+    grep '^[RU],[^,]\+,".*"$' packages.csv > /mnt/tmp/packages.csv
+    # remove any inline '#' comments
+    sed -i "s/\s*#[^\"']*$//" /mnt/tmp/packages.csv
+  else
+    printf '%b\n' "This directory does not have a \033[37mpackages.csv\033[0m file!"
+    return 1
+  fi
+  # total number of packages
+  printf '%s\n' "Total packages: $(wc -l < /mnt/tmp/packages.csv)" && n=0
+  # installation loop
+  while IFS=, read -r repo pkg desc; do
+    echo "$desc" | grep -q "^\".*\"$" && desc="$(echo "$desc" | sed -E "s/(^\"|\"$)//g")"
+    n=$((n + 1)) && msg=$(printf '%b\n' "${n}. \033[35m${pkg}\033[0m ${desc}")
+    case "$repo" in
+      "R")
+        gum spin --spinner line --title "$msg" -- \
+          pacstrap -K /mnt "$pkg" > /dev/null 2&>1 ||
+            printf '%b\n' "\033[32m${repo}\033[0m, \033[31m${pkg}\033[0m failed"
+      ;;
+      "U")
+        gum spin --spinner line --title "$msg" -- \
+          arch-chroot /mnt -- paru --noconfirm --needed -S "$pkg" > /dev/null 2&>1 ||
+            printf '%b\n' "\033[32m${repo}\033[0m, \033[31m${pkg}\033[0m failed"
+      ;;
+    esac
+  done < /mnt/tmp/packages.csv && rm -f /mnt/tmp/packages.csv
+}
+
+
 install_aur_helper() {
   parudir="/home/$username/.cache/paru/clone"
   sudo -u "$username" mkdir -p "${parudir}" &&
@@ -128,3 +183,18 @@ chown -c root:root /etc/doas.conf && chmod -c 0400 /etc/doas.conf
 
 # check for syntax errors as it is imperative that /etc/doas.conf is error free
 doas doas -C /etc/doas.conf >&2 || end "please fix the syntax error before proceeding"
+
+### PACKAGES ###
+
+header "Installing user packages"
+
+# temporarily allow user to install packages without password
+echo "%${username} ALL=(ALL) NOPASSWD: ALL" > /mnt/etc/sudoers.d/install-packages
+
+# install AUR helper
+install_paru || end "something went wrong at install_paru"
+
+install_packages || end "something went wrong at install_packages"
+
+# clean up
+rm -f /mnt/etc/sudoers.d/install-packages
