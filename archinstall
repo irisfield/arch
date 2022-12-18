@@ -12,10 +12,6 @@ install() {
   pacman --noconfirm --needed -S "$1" >/dev/null 2>&1
 }
 
-header() {
-  gum style --bold --foreground 99 "$1"
-}
-
 welcome() {
   gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
     --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border double \
@@ -180,7 +176,8 @@ final_prompt() {
 }
 
 create_swapfile() {
-  header "Making swapfile"
+  # header
+  gum style --bold --foreground 99 "Making swapfile"
   # create swapfile and change its permission
   fallocate -l "${1}GiB" /maidswap && chmod 600 /maidswap
   # make the swap and activate it
@@ -257,13 +254,15 @@ final_prompt || end "exited"
 
 ### START INSTALL ###
 
-header "Updating archlinux-keyring"
+# header
+gum style --bold --foreground 99 "Updating archlinux-keyring"
 
 # refresh archlinux keyring and install reflector if missing
 pacman --needed --noconfirm -S archlinux-keyring reflector curl ca-certificates ||
   end "pacman failed, please make sure you have an internet connection"
 
-header "Updating mirrors using reflector"
+# header
+gum style --bold --foreground 99 "Updating mirrors using reflector"
 
 # update the mirror list using reflector to have the fastest servers
 reflector --protocol https --country US --age 12 --latest 45 --fastest 15 \
@@ -272,7 +271,8 @@ reflector --protocol https --country US --age 12 --latest 45 --fastest 15 \
 
 ### DISK FORMATTING ###
 
-header "Formatting partitions"
+# header
+gum style --bold --foreground 99 "Formatting partitions"
 
 # format the partitions
 mkfs.ext4 "$rootpartition" && [ "$formatefi" = "yes" ] &&
@@ -286,7 +286,8 @@ mount "$rootpartition" /mnt && mount --mkdir "$efipartition" /mnt/boot
 # detect cpu vendor
 lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
 
-header "Installing core packages"
+# header
+gum style --bold --foreground 99 "Installing core packages"
 
 # core packages
 set -- linux linux-firmware linux-headers base base-devel ${vendor}-ucode
@@ -307,7 +308,8 @@ arch-chroot /mnt systemctl stop NetworkManager
 
 ### SYSTEM CONFIGURATION ###
 
-header "Generating filesystem table"
+# header
+gum style --bold --foreground 99 "Generating filesystem table"
 
 # generate a filesystem table (fstab) file using UUID
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -326,7 +328,8 @@ arch-chroot /mnt hwclock --systohc
 
 ### LOCALE AND KEYMAP ###
 
-header "Generating locale"
+# header
+gum style --bold --foreground 99 "Generating locale"
 
 # uncomment and generate the needed locales
 sed -i "s/#en_US.UTF-8/en_US.UTF-8/" /mnt/etc/locale.gen
@@ -351,7 +354,8 @@ EOT
 
 ### USER ###
 
-header "Creating users"
+# header
+gum style --bold --foreground 99 "Creating users"
 
 arch-chroot /mnt useradd -m -s /usr/bin/zsh "$username" &&
   printf '%b\n' "created user \033[32m${username}\033[0m"
@@ -420,7 +424,8 @@ arch-chroot /mnt systemctl stop reflector.timer
 
 ### BOOT LOADER ###
 
-header "GRUB"
+# header
+gum style --bold --foreground 99 "GRUB"
 
 # install GRUB
 arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
