@@ -233,12 +233,12 @@ install_packages() {
     case "$repo" in
       "R")
         gum spin --spinner line --title "$msg" -- \
-          arch-chroot /mnt pacman --noconfirm --needed -S "$pkg" > /dev/null 2&>1 ||
+          pacstrap -K /mnt "$pkg" > /dev/null 2&>1 ||
             printf '%b\n' "\033[32m${repo}\033[0m, \033[31m${pkg}\033[0m failed"
       ;;
       "U")
         gum spin --spinner line --title "$msg" -- \
-          arch-chroot /mnt paru --noconfirm --needed -S "$pkg" > /dev/null 2&>1 ||
+          arch-chroot /mnt -- paru --noconfirm --needed -S "$pkg" > /dev/null 2&>1 ||
             printf '%b\n' "\033[32m${repo}\033[0m, \033[31m${pkg}\033[0m failed"
       ;;
     esac
@@ -343,6 +343,7 @@ lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
 header "Installing core packages"
 
 # core packages
+shift "${#@}"
 set -- linux linux-firmware linux-headers base base-devel ${vendor}-ucode
 set -- "$@" grub efibootmgr zsh dash git gum reflector networkmanager
 set -- "$@" neovim terminus-font curl ca-certificates
