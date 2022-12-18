@@ -298,13 +298,13 @@ set -- linux linux-firmware linux-headers base base-devel ${vendor}-ucode
 set -- "$@" grub efibootmgr zsh dash git gum reflector networkmanager
 set -- "$@" neovim terminus-font curl ca-certificates
 
-# n=0 && for pkg in "$@"; do
-#   # install the core packages
-#   n=$((n + 1)) && gum spin --spinner line --title "Installating $pkg (${n} / ${#@})" -- \
-#     pacstrap -K /mnt "$pkg" || printf '%b\n' "\033[31m${pkg}\033[0m failed"
-# done && shift "${#@}" && unset n msg vendor
+n=0 && for pkg in "$@"; do
+  # install the core packages
+  n=$((n + 1)) && gum spin --spinner line --title "Installating $pkg (${n} / ${#@})" -- \
+    pacstrap -K /mnt "$pkg" || printf '%b\n' "\033[31m${pkg}\033[0m failed"
+done && shift "${#@}" && unset n msg vendor
 
-pacstrap -K /mnt "$@" && echo "installed all the core packages"
+# pacstrap -K /mnt "$@" && echo "installed all the core packages"
 
 # to allow connecting to the internet on reboot
 arch-chroot /mnt systemctl enable NetworkManager
