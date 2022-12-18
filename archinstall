@@ -103,7 +103,8 @@ Only an EFI and root partition are required.
 You may also opt to partition the disk in any other way.
 $(gum style --align center --bold --foreground 69 \
 'Would you like to partition the disk?')" && unset label && cfdisk "$diskname"
-  if lsblk -Alpn -o NAME,SIZE,TYPE | grep "${diskname##*/}.*part"; then
+  # make sure the disk has been partitioned
+  if ! lsblk -Alpn -o NAME,SIZE,TYPE | grep "${diskname##*/}.*part"; then
     end "no partitions found, please partition your disk before quitting cfdisk"
   fi
 }
