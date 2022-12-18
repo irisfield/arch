@@ -298,13 +298,13 @@ set -- linux linux-firmware linux-headers base base-devel ${vendor}-ucode
 set -- "$@" grub efibootmgr zsh dash git gum reflector networkmanager
 set -- "$@" neovim terminus-font curl ca-certificates
 
-n=0 && for pkg in "$@"; do
-  # install the core packages
-  n=$((n + 1)) && gum spin --spinner line --title "Installating $pkg (${n} / ${#@})" -- \
-    pacstrap -K /mnt "$pkg" || printf '%b\n' "\033[31m${pkg}\033[0m failed"
-done && shift "${#@}" && unset n msg vendor
+# n=0 && for pkg in "$@"; do
+#   # install the core packages
+#   n=$((n + 1)) && gum spin --spinner line --title "Installating $pkg (${n} / ${#@})" -- \
+#     pacstrap -K /mnt "$pkg" || printf '%b\n' "\033[31m${pkg}\033[0m failed"
+# done && shift "${#@}" && unset n msg vendor
 
-echo "Installed all the core packages."
+pacstrap -K /mnt "$@" && echo "installed all the core packages"
 
 # to allow connecting to the internet on reboot
 arch-chroot /mnt systemctl enable NetworkManager
@@ -355,6 +355,14 @@ arch-chroot /mnt tee -a /etc/hosts >/dev/null << EOT
 ::1          localhost
 127.0.1.1    ${hostname}.localdomain $hostname
 EOT
+
+### INITRAMFS ###
+
+# header
+gum style --bold --foreground 99 "Creating new initramfs"
+
+# create new initramfs
+arch-chroot /mnt mkinitcpio -P
 
 ### USER ###
 
@@ -440,7 +448,7 @@ arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
 ### FINALIZE ###
 
 # unmount the partitions
-umount /mnt/boot && umount /mnt
+umount -R /mnt
 
 # installation complete
 gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
