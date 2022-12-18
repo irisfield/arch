@@ -440,5 +440,5 @@ umount /mnt/boot && umount /mnt
 
 # installation complete
 gum style --align center --foreground 99 --width 60 --margin "1 2" --padding "1 2" \
-  "Installation complete. If there were no error messages, please reboot and login \
-as $(print '%b' "\033[4m${username}\033[24m") or as $(print '%b' "\033[4mroot\033[24m")."
+  "Installation complete. If there were no error messages, please reboot and login as \
+$(printf '%b' "\033[4m${username}\033[24m") or as $(printf '%b' "\033[4mroot\033[24m")."
