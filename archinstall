@@ -234,12 +234,12 @@ install_packages() {
       "R")
         gum spin --spinner line --title "$msg" -- \
           arch-chroot /mnt pacman --noconfirm --needed -S "$pkg" > /dev/null 2&>1 ||
-            printf '%b\n' "\033[31m${pkg}\033[0m from \033[32m${repo}\033[0m failed"
+            printf '%b\n' "\033[32m${repo}\033[0m, \033[31m${pkg}\033[0m failed"
       ;;
       "U")
         gum spin --spinner line --title "$msg" -- \
           arch-chroot /mnt paru --noconfirm --needed -S "$pkg" > /dev/null 2&>1 ||
-            printf '%b\n' "\033[31m${pkg}\033[0m from \033[32m${repo}\033[0m failed"
+            printf '%b\n' "\033[32m${repo}\033[0m, \033[31m${pkg}\033[0m failed"
       ;;
     esac
   done < /mnt/tmp/packages.csv && rm -f /mnt/tmp/packages.csv
@@ -347,14 +347,11 @@ set -- linux linux-firmware linux-headers base base-devel ${vendor}-ucode
 set -- "$@" grub efibootmgr zsh dash git gum reflector networkmanager
 set -- "$@" neovim terminus-font curl ca-certificates
 
-printf '%s\n' "Total packages: ${#@}"
-
 for package in "$@"; do
   # install the core packages
-  gum spin --spinner line --title "${#package}. ${packages}" -- \
+  gum spin --spinner line --title "Installating $package (${#package} / ${#@})" -- \
     pacstrap -K /mnt "$package" || printf '%b\n' "\033[31m${package}\033[0m failed"
-  shift
-done && unset msg vendor
+done && shift "${#@}" && unset msg vendor
 
 echo "Installed all the core packages."
 
