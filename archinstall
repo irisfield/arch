@@ -8,10 +8,6 @@ end() {
   printf '%s\n' "$1" >&2 && exit 1 # log to stderr and exit with failure
 }
 
-install() {
-  pacman --noconfirm --needed -S "$1" >/dev/null 2>&1
-}
-
 welcome() {
   gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
     --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border double \
@@ -150,14 +146,15 @@ suggest_swapfile() {
       --prompt.align center --default "This system has ${ramsize}GB of RAM.
 A swap file double that size is recommended.
 Would you like to create $((ramsize * 2))GB of swap file?" &&
-      ramsize=$((ramsize * 2)) || ramsize="0"
+      ramsize=$((ramsize * 2)) || unset ramsize
   else
-    ramsize="0"
+    unset ramsize
   fi
 }
 
 input_confirmation() {
   hidden=$(for _ in $(seq 1 ${#password}); do printf '%s' "*"; done)
+  [ -n "$ramsize" ] && swapsize="$ramsize GB" || swapsize="NA"
   gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.align left \
     --prompt.margin "1 2" --prompt.padding "1 2" --prompt.border rounded \
     --default "$(gum format -t markdown "username|password|hostname|keymap|timezone
@@ -166,10 +163,10 @@ ${username}|${hidden}|${hostname}|${keymap}|${timezone}
 
 disk|efi part|format|root part|swap
 -|-|-|-|-
-${diskname}|${efipartition}|${formatefi}|${rootpartition}|${ramsize} GB
+${diskname}|${efipartition}|${formatefi}|${rootpartition}|${swapsize}
 
 $(gum style --align center --bold --width 60 --foreground 69 \
-  'Would you like to make changes?')")"
+  'Would you like to make changes?')")" && unset hidden swapsize
 }
 
 final_prompt() {
@@ -296,7 +293,7 @@ gum style --bold --foreground 99 "Installing core packages"
 # install the core packages in a single pacstrap call (required to generate initramfs)
 gum spin --spinner line --title "Installing core packages..." -- pacstrap -K /mnt \
   linux linux-firmware linux-headers base base-devel ${vendor}-ucode grub efibootmgr zsh \
-  dash git gum reflector networkmanager neovim terminus-font curl ca-certificates &&
+  dash git gum reflector networkmanager neovim terminus-font curl ca-certificates ||
     end "core packages failed, please make sure you have an internet connection"
 
 echo "installed all the core packages."
@@ -317,7 +314,10 @@ genfstab -U /mnt >> /mnt/etc/fstab
 genfstab -U /mnt
 
 # create swapfile if recommended
-[ "$ramsize" -eq 0 ] && create_swapfile "$ramsize"
+if [ -n "$ramsize" ]; then
+  gum style --bold --foreground 99 "Creating swapfile"
+  create_swapfile "$ramsize"
+fi
 
 # set the time zone
 arch-chroot /mnt ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
@@ -354,10 +354,10 @@ EOT
 ### INITRAMFS ###
 
 # header
-gum style --bold --foreground 99 "Creating new initramfs"
+# gum style --bold --foreground 99 "Creating new initramfs"
 
 # create new initramfs
-arch-chroot /mnt mkinitcpio -P
+# arch-chroot /mnt mkinitcpio -P > /dev/null 2>&1
 
 ### USER ###
 
