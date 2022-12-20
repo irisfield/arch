@@ -2,8 +2,7 @@
 
 if [ ! -d /etc/pacman.d/hooks ]; then
   /usr/bin/mkdir -p /etc/pacman.d/hooks
-  echo "created directory 'etc/pacman.d/hook'"
-fi
+  echo "created directory 'etc/pacman.d/hook'" fi
 
 addhook_orphans() {
   # check for orphans after installing, upgrading, or removing a package
