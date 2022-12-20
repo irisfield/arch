@@ -18,7 +18,7 @@ This script installs a minimal Arch Linux system."
 
 get_password() {
   password=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Password: " \
-    --password --placeholder "(enter a password for root")
+    --password --placeholder "(enter a password for root)")
   verify=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Verify: " \
     --password --placeholder "(retype the password)")
   while [ -z "$password" ] || [ "$password" != "$verify" ]; do
@@ -350,14 +350,6 @@ EOT
 
 # header
 gum style --bold --foreground 99 "Creating users"
-
-pacstrap -K /mnt zsh > /dev/null 2>&1 &&
-  arch-chroot /mnt useradd -m -s /usr/bin/zsh "$username" &&
-    printf '%b\n' "created user \033[32m${username}\033[0m"
-
-# set password for the new user
-echo "$username:$password" | arch-chroot /mnt chpasswd ||
-  gum style --foreground 161 "error setting the password for ${username}."
 
 # set password for the root user
 echo "root:$password" | arch-chroot /mnt chpasswd && unset password verify

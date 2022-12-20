@@ -238,3 +238,12 @@ echo "Defaults editor=/usr/bin/nvim" > /mnt/etc/sudoers.d/02-visudo-editor
 
 # permit the wheel group to use doas with password
 echo "permit persist keepenv :${username}" > /mnt/etc/doas.conf
+
+
+pacstrap -K /mnt zsh > /dev/null 2>&1 &&
+  arch-chroot /mnt useradd -m -s /usr/bin/zsh "$username" &&
+    printf '%b\n' "created user \033[32m${username}\033[0m"
+
+# set password for the new user
+echo "$username:$password" | arch-chroot /mnt chpasswd ||
+  gum style --foreground 161 "error setting the password for ${username}."
