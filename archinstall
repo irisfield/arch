@@ -263,10 +263,8 @@ reflector --protocol https --country US --age 12 --latest 45 --fastest 15 \
 gum style --bold --foreground 99 "Formatting partitions"
 
 # format the partitions
-mkfs.ext4 -q "$rootpartition" && [ "$formatefi" = "yes" ] &&
+mkfs.ext4 "$rootpartition" && [ "$formatefi" = "yes" ] &&
   mkfs.fat -F 32 "$efipartition" || end "error formatting the partitions"
-
-echo "formatted the partitions"
 
 # mount the partitions
 mount "$rootpartition" /mnt && mount --mkdir "$efipartition" /mnt/boot
@@ -349,7 +347,10 @@ gum style --bold --foreground 99 "Creating user"
 echo "root:$password" | arch-chroot /mnt chpasswd && unset password verify
 printf '%b\n' "created user \033[32mroot\033[0m"
 
-### SYSTEM CONFIGURATION ###
+### SYSTEM PREFRENCES ###
+
+# header
+gum style --bold --foreground 99 "Configuring system preferences"
 
 # enable pacman multilib repository
 sed -i '/^#.multilib]$/s/^#//;/^.multilib]$/{n;s/^#//}' /mnt/etc/pacman.conf
@@ -359,6 +360,8 @@ sed -i '/^#Color/s/^#//;/^#ILoveCandy/s/^#//;/^#ParallelDownloads/s/^#//' /mnt/e
 
 # use all cores when compiling packages with makepkg
 sed -i "/^#MAKEFLAGS/s/^#//;s/-j2/-j$(nproc)/" /mnt/etc/makepkg.conf
+
+echo "enabled pacman multilib repository and some other misc options"
 
 # beep begone!
 rmmod pcspkr > /dev/null 2>&1 && echo "blacklist pcspkr" > /mnt/etc/modprobe.d/nobeep.conf
@@ -384,6 +387,8 @@ EOF
 # allow reflector to update the mirrorlist periodically (weekly by default)
 arch-chroot /mnt systemctl enable reflector.timer
 arch-chroot /mnt systemctl stop reflector.timer
+
+echo "configured reflector and zsh custom source directory"
 
 ### BOOT LOADER ###
 
