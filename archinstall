@@ -240,6 +240,18 @@ done
 
 final_prompt || end "exited"
 
+### DISK FORMATTING ###
+
+# header
+gum style --bold --foreground 99 "Formatting partitions"
+
+# format the partitions
+mkfs.ext4 "$rootpartition" && [ "$formatefi" = "yes" ] &&
+  mkfs.fat -F 32 "$efipartition" || end "error formatting the partitions"
+
+# mount the partitions
+mount "$rootpartition" /mnt && mount --mkdir "$efipartition" /mnt/boot
+
 ### START INSTALL ###
 
 # header
@@ -254,20 +266,8 @@ gum style --bold --foreground 99 "Updating the mirrorlist using reflector"
 
 # update the mirror list using reflector to have the fastest servers
 reflector --protocol https --country US --age 12 --latest 45 --fastest 15 \
-  --save /etc/pacman.d/mirrorlist >/dev/null 2>&1 && echo "updated the mirrorlist\n" &&
-    pacman -Sy || printf '%s\n' "reflector failed, skipping..."
-
-### DISK FORMATTING ###
-
-# header
-gum style --bold --foreground 99 "Formatting partitions"
-
-# format the partitions
-mkfs.ext4 "$rootpartition" && [ "$formatefi" = "yes" ] &&
-  mkfs.fat -F 32 "$efipartition" || end "error formatting the partitions"
-
-# mount the partitions
-mount "$rootpartition" /mnt && mount --mkdir "$efipartition" /mnt/boot
+  --save /etc/pacman.d/mirrorlist >/dev/null 2>&1 && pacman -Sy ||
+    printf '%s\n' "reflector failed, skipping..."
 
 ### CORE PACKAGES ###
 
@@ -280,7 +280,7 @@ gum style --bold --foreground 99 "Installing core packages"
 # install the core packages in a single pacstrap call (required to generate initramfs)
 gum spin --spinner line --title "Installing core packages..." -- pacstrap -K /mnt \
   linux linux-firmware linux-headers base base-devel ${vendor}-ucode grub efibootmgr \
-  dash doas git gum reflector networkmanager neovim terminus-font curl ca-certificates ||
+  doas git gum reflector networkmanager neovim terminus-font curl ca-certificates ||
     end "core packages failed, please make sure you have an internet connection"
 
 printf '%s\n' "installed all the core packages"
