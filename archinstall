@@ -281,7 +281,7 @@ gum spin --spinner line --title "Installing core packages..." -- pacstrap -K /mn
   doas git gum reflector networkmanager neovim terminus-font curl ca-certificates ||
     end "core packages failed, please make sure you have an internet connection"
 
-printf '%s\n' "installed all the core packages"
+printf '%s\n' "core packages installed"
 
 # needed to connect to the internet on reboot
 arch-chroot /mnt systemctl enable NetworkManager
