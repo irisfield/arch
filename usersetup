@@ -14,6 +14,31 @@ welcome() {
 This script installs a minimal Linux desktop using irisfield's dotfiles."
 }
 
+get_username() {
+  username=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Account name: " \
+    --placeholder "(enter a name for the user account)")
+  while ! echo "$username" | grep -q "^[a-z_][a-z0-9_-]*$"; do
+    username=$(gum input --prompt.foreground 99 --prompt.bold \
+      --prompt "Try again. Account name: " \
+      --placeholder "(only lowercase letters, - and _ are allowed)")
+  done
+}
+
+get_password() {
+  password=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Password: " \
+    --password --placeholder "(enter a password for $username)")
+  verify=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Verify: " \
+    --password --placeholder "(retype the password)")
+  while [ -z "$password" ] || [ "$password" != "$verify" ]; do
+    unset verify
+    password=$(gum input --prompt.foreground 99 --prompt.bold \
+      --prompt "Try again. Password: " --password \
+      --placeholder "(enter a password for $username)")
+    verify=$(gum input --prompt.foreground 99 --prompt.bold --prompt "Verify: " \
+      --password --placeholder "(retype the password)")
+  done
+}
+
 if_user_exists() {
   if id -u "$username" >/dev/null 2>&1; then
     gum confirm --prompt.foreground 99 --prompt.border-foreground 105 --prompt.width 55 \
@@ -198,3 +223,18 @@ install_packages || end "something went wrong at install_packages"
 
 # clean up
 rm -f /mnt/etc/sudoers.d/install-packages
+
+
+# permit user to sudo with password
+echo "%${username} ALL=(ALL:ALL) ALL" > /mnt/etc/sudoers.d/00-"${username}"
+
+# allow some system commands to run without password
+echo "%${username} ALL=(ALL:ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/usr/bin/mount,\
+  /usr/bin/umount,/usr/bin/pacman --noconfirm -S,/usr/bin/pacman -S,/usr/bin/pacman -Sy,\
+  /usr/bin/pacman -Syu" > /mnt/etc/sudoers.d/01-no-password-commands
+
+# set the default editor for visudo
+echo "Defaults editor=/usr/bin/nvim" > /mnt/etc/sudoers.d/02-visudo-editor
+
+# permit the wheel group to use doas with password
+echo "permit persist keepenv :${username}" > /mnt/etc/doas.conf
