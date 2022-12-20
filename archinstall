@@ -250,12 +250,12 @@ pacman --needed --noconfirm -S archlinux-keyring reflector ||
   end "pacman failed, please make sure you have an internet connection"
 
 # header
-gum style --bold --foreground 99 "Updating mirrors using reflector"
+gum style --bold --foreground 99 "Updating the mirrorlist using reflector"
 
 # update the mirror list using reflector to have the fastest servers
 reflector --protocol https --country US --age 12 --latest 45 --fastest 15 \
-  --save /etc/pacman.d/mirrorlist >/dev/null 2>&1 && pacman -Sy ||
-    printf '%s\n' "reflector failed, skipping..."
+  --save /etc/pacman.d/mirrorlist >/dev/null 2>&1 && echo "updated the mirrorlist\n" &&
+    pacman -Sy || printf '%s\n' "reflector failed, skipping..."
 
 ### DISK FORMATTING ###
 
@@ -283,7 +283,7 @@ gum spin --spinner line --title "Installing core packages..." -- pacstrap -K /mn
   dash doas git gum reflector networkmanager neovim terminus-font curl ca-certificates ||
     end "core packages failed, please make sure you have an internet connection"
 
-echo "installed all the core packages"
+printf '%s\n' "installed all the core packages"
 
 # needed to connect to the internet on reboot
 arch-chroot /mnt systemctl enable NetworkManager
@@ -361,7 +361,9 @@ sed -i '/^#Color/s/^#//;/^#ILoveCandy/s/^#//;/^#ParallelDownloads/s/^#//' /mnt/e
 # use all cores when compiling packages with makepkg
 sed -i "/^#MAKEFLAGS/s/^#//;s/-j2/-j$(nproc)/" /mnt/etc/makepkg.conf
 
-echo "enabled pacman multilib repository and some other misc options"
+printf '%s\n' "enabled pacman multilib repository"
+printf '%s\n' "enabled pacman options: Color, ILoveCandy, and ParallelDownloads"
+printf '%s\n' "allowed makepkg to use all cores to compile packages"
 
 # beep begone!
 rmmod pcspkr > /dev/null 2>&1 && echo "blacklist pcspkr" > /mnt/etc/modprobe.d/nobeep.conf
@@ -388,7 +390,8 @@ EOF
 arch-chroot /mnt systemctl enable reflector.timer
 arch-chroot /mnt systemctl stop reflector.timer
 
-echo "configured reflector and zsh custom source directory"
+printf '%s\n' "set up a custom source directory for zsh"
+printf '%s\n' "configured the reflector service to periodically update the mirrorlist"
 
 ### BOOT LOADER ###
 
