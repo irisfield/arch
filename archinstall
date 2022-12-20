@@ -254,12 +254,10 @@ mount "$rootpartition" /mnt && mount --mkdir "$efipartition" /mnt/boot
 
 ### START INSTALL ###
 
-# header
-gum style --bold --foreground 99 "Updating archlinux-keyring"
-
 # refresh archlinux keyring and ensure reflector is installed
-pacman --needed --noconfirm -S archlinux-keyring reflector ||
-  end "pacman failed, please make sure you have an internet connection"
+gum spin --spinner line --title "Refreshing the archlinux-keyring..." -- \
+  pacman --needed --noconfirm -S archlinux-keyring reflector ||
+    end "pacman failed, please make sure you have an internet connection"
 
 # header
 gum style --bold --foreground 99 "Updating the mirrorlist using reflector"
@@ -271,11 +269,11 @@ reflector --protocol https --country US --age 12 --latest 45 --fastest 15 \
 
 ### CORE PACKAGES ###
 
-# detect cpu vendor
-lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
-
 # header
 gum style --bold --foreground 99 "Installing core packages"
+
+# detect cpu vendor
+lscpu | grep -Eiq 'id.*amd' && vendor='amd' || vendor='intel'
 
 # install the core packages in a single pacstrap call (required to generate initramfs)
 gum spin --spinner line --title "Installing core packages..." -- pacstrap -K /mnt \
